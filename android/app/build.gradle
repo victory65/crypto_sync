@@ -1,0 +1,74 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(17)
+        }
+    }
+
+    namespace = "com.example.crypto_sync"
+    // Updated to match your new SDK 36 (Baklava) installation
+    compileSdk = 36
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    defaultConfig {
+        applicationId = "com.example.crypto_sync"
+        // Support for older devices (Android 5.0+) while targeting the newest
+        minSdkVersion = flutter.minSdkVersion
+        targetSdk = 36
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // Signing with the debug keys for now so `flutter run --release` works.
+            signingConfig = signingConfigs.debug
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+    // Add any specific native dependencies here if needed
+}
+
+// This block is critical for 2026 Flutter 3.41 projects. 
+// It forces all external plugins to use Java 17, preventing "jlink" and "class version" errors.
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                compileSdk = 36
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+            }
+        }
+        tasks.withType(JavaCompile).configureEach {
+            options.compilerArgs << '-Xlint:-options'
+            if (JavaVersion.current().isJava11Compatible()) {
+                options.release.set(17)
+            }
+        }
+    }
+}
