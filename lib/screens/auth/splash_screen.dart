@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../providers/sync_provider.dart';
+import '../../providers/subscription_provider.dart';
+import '../../providers/settings_provider.dart';
+import '../../services/biometric_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -11,16 +16,42 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  final BiometricService _biometricService = BiometricService();
+
   @override
   void initState() {
     super.initState();
-    _navigateToNext();
+    _handleRouting();
   }
 
-  void _navigateToNext() async {
-    await Future.delayed(const Duration(seconds: 3));
-    if (mounted) {
+  Future<void> _handleRouting() async {
+    // Keep minimum splash duration for brand visibility
+    final delay = Future.delayed(const Duration(seconds: 3));
+    
+    final syncProvider = context.read<SyncProvider>();
+    final subProvider = context.read<SubscriptionProvider>();
+    final settings = context.read<SettingsProvider>();
+    
+    // Predetermin the route in the background
+    final hasSession = await syncProvider.loadSession(subProvider: subProvider);
+    
+    await delay;
+
+    if (!mounted) return;
+
+    if (!hasSession) {
       context.go('/login');
+    } else if (settings.isBiometricEnabled) {
+      final success = await _biometricService.authenticate();
+      if (success && mounted) {
+        context.go('/');
+      } else if (mounted) {
+        // If biometric fails or cancelled, we still have to go to login or show lock
+        // For simplicity during revert, we go to login to re-auth
+        context.go('/login');
+      }
+    } else {
+      context.go('/');
     }
   }
 
@@ -32,37 +63,7 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withOpacity(0.3),
-                    blurRadius: 20,
-                    spreadRadius: 5,
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.sync,
-                color: Colors.white,
-                size: 60,
-              ),
-            )
-                .animate()
-                .scale(
-                  duration: 600.ms,
-                  curve: Curves.easeOutBack,
-                )
-                .rotate(
-                  duration: 1200.ms,
-                  begin: 0,
-                  end: 1,
-                  curve: Curves.easeInOutBack,
-                ),
+            _buildLogo(),
             const SizedBox(height: 24),
             Text(
               'CRYPTO SYNC',
@@ -88,5 +89,39 @@ class _SplashScreenState extends State<SplashScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildLogo() {
+    return Container(
+      width: 100,
+      height: 100,
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.3),
+            blurRadius: 20,
+            spreadRadius: 5,
+          ),
+        ],
+      ),
+      child: const Icon(
+        Icons.sync,
+        color: Colors.white,
+        size: 60,
+      ),
+    )
+        .animate()
+        .scale(
+          duration: 600.ms,
+          curve: Curves.easeOutBack,
+        )
+        .rotate(
+          duration: 1200.ms,
+          begin: 0,
+          end: 1,
+          curve: Curves.easeInOutBack,
+        );
   }
 }

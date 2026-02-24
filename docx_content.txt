@@ -1,0 +1,38 @@
+﻿python : Traceback 
+(most recent call 
+last):
+At line:1 char:1
++ python -c "
++ ~~~~~~~~~~~
+    + CategoryInfo    
+          : NotSpeci  
+  fied: (Traceback    
+ (most recent call    
+ last)::String) [    
+], RemoteExceptio    n
+    + FullyQualifiedE 
+   rrorId : NativeCo  
+  mmandError
+ 
+  File "<string>", 
+line 8, in <module>
+    print(text)
+    ~~~~~^^^^^^
+  File "C:\Users\VICTO
+RY\AppData\Local\Progr
+ams\Python\Python313\L
+ib\encodings\cp1252.py
+", line 19, in encode
+    return codecs.char
+map_encode(input,self.
+errors,encoding_table)
+[0]
+           ~~~~~~~~~~~
+~~~~~~~~~~^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 
+'charmap' codec can't 
+encode character 
+'\ufe0f' in position 
+2662: character maps 
+to <undefined>

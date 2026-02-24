@@ -1,8 +1,13 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:go_router/go_router.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/common_widgets.dart';
-import '../../data/mock_data.dart';
+import '../../core/api_config.dart';
+import 'package:provider/provider.dart';
+import '../../providers/sync_provider.dart';
+import '../../models/trade_models.dart';
 
 class ManualTradeSetupScreen extends StatefulWidget {
   const ManualTradeSetupScreen({super.key});
@@ -12,17 +17,58 @@ class ManualTradeSetupScreen extends StatefulWidget {
 }
 
 class _ManualTradeSetupScreenState extends State<ManualTradeSetupScreen> {
-  String _selectedPair = MockData.assetPairs[0];
+  final _assetPairs = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT', 'ADA/USDT'];
+  late String _selectedPair;
   TradeSide _side = TradeSide.buy;
   OrderType _orderType = OrderType.market;
+  bool _syncSlaves = true;
   final _sizeController = TextEditingController();
   final _priceController = TextEditingController();
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedPair = _assetPairs[0];
+  }
 
   @override
   void dispose() {
     _sizeController.dispose();
     _priceController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleExecuteSync() async {
+    final syncProvider = context.read<SyncProvider>();
+    final userId = syncProvider.lastUserId ?? 'user_123';
+
+    setState(() => _isLoading = true);
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/simulate/trade?user_id=$userId'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final positionId = data['position_id'];
+
+        if (mounted) {
+          context.push('/trade/execution', extra: positionId);
+        }
+      } else {
+        throw Exception('Failed to initiate sync');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.danger),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -53,8 +99,8 @@ class _ManualTradeSetupScreenState extends State<ManualTradeSetupScreen> {
             _buildSlaveSyncOptions(),
             const SizedBox(height: 48),
             GradientButton(
-              label: 'Preview Sync',
-              onPressed: () => context.push('/trade/preview'),
+              label: _isLoading ? 'EXCUTING...' : 'Execute Sync',
+              onPressed: _isLoading ? null : _handleExecuteSync,
               startColor: _side == TradeSide.buy ? AppColors.success : AppColors.danger,
               endColor: _side == TradeSide.buy ? AppColors.success.withOpacity(0.8) : AppColors.danger.withOpacity(0.8),
             ),
@@ -67,8 +113,9 @@ class _ManualTradeSetupScreenState extends State<ManualTradeSetupScreen> {
   Widget _buildSideSelector() {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).cardTheme.color,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.1)),
       ),
       child: Row(
         children: [
@@ -101,11 +148,11 @@ class _ManualTradeSetupScreenState extends State<ManualTradeSetupScreen> {
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           value: _selectedPair,
-          dropdownColor: AppColors.surface,
+          dropdownColor: Theme.of(context).cardTheme.color,
           decoration: const InputDecoration(
             prefixIcon: Icon(Icons.currency_bitcoin),
           ),
-          items: MockData.assetPairs.map((pair) {
+          items: _assetPairs.map((pair) {
             return DropdownMenuItem(value: pair, child: Text(pair));
           }).toList(),
           onChanged: (val) => setState(() => _selectedPair = val!),
@@ -137,14 +184,14 @@ class _ManualTradeSetupScreenState extends State<ManualTradeSetupScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : AppColors.surface,
+          color: isSelected ? AppColors.primary : Theme.of(context).cardTheme.color,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: isSelected ? AppColors.primary : AppColors.border),
+          border: Border.all(color: isSelected ? AppColors.primary : Theme.of(context).dividerColor.withOpacity(0.1)),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.white : AppColors.textSecondary,
+            color: isSelected ? Colors.white : Theme.of(context).textTheme.bodyMedium?.color,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -171,18 +218,41 @@ class _ManualTradeSetupScreenState extends State<ManualTradeSetupScreen> {
   }
 
   Widget _buildSlaveSyncOptions() {
+    final syncProvider = context.watch<SyncProvider>();
+    final activeSlavesCount = syncProvider.accounts.where((a) {
+      if (a is! Map) return false;
+      final type = a['type']?.toString().toLowerCase();
+      final id = a['id']?.toString().toLowerCase();
+      final isMaster = type == 'master' || id == 'master';
+      return !isMaster && a['enabled'] == true;
+    }).length;
+
     return AppCard(
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Mirror to All Active Slaves', style: TextStyle(fontWeight: FontWeight.w600)),
-              Text('5 accounts selected', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Mirror to All Active Slaves', style: TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  activeSlavesCount == 0 
+                      ? 'No active slave accounts connected' 
+                      : '$activeSlavesCount account${activeSlavesCount == 1 ? "" : "s"} selected', 
+                  style: TextStyle(
+                    fontSize: 12, 
+                    color: activeSlavesCount == 0 ? AppColors.danger.withOpacity(0.8) : AppColors.textSecondary
+                  )
+                ),
+              ],
+            ),
           ),
-          Switch.adaptive(value: true, onChanged: (val) {}),
+          Switch.adaptive(
+            value: _syncSlaves && activeSlavesCount > 0, 
+            onChanged: activeSlavesCount > 0 ? (val) => setState(() => _syncSlaves = val) : null,
+            activeColor: AppColors.success,
+          ),
         ],
       ),
     );

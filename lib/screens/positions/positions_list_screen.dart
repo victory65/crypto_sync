@@ -4,50 +4,66 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/sync_status_pill.dart';
-import '../../data/mock_data.dart';
+// Redundant mock_data import removed
+
+import 'package:provider/provider.dart';
+import '../../providers/sync_provider.dart';
 
 class PositionsListScreen extends StatelessWidget {
   const PositionsListScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final syncProvider = context.watch<SyncProvider>();
+    
+    final displayPositions = syncProvider.currentPositions.values
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Active Positions'),
         actions: const [
           Padding(
             padding: EdgeInsets.only(right: 16.0),
-            child: SyncStatusPill(status: 'Active'),
+            child: SyncStatusPill(),
           ),
         ],
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Search pairs (e.g. BTC/USDT)...',
-                prefixIcon: const Icon(Icons.search, size: 20),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                fillColor: AppColors.surface,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-          ),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              itemCount: MockData.positions.length,
-              itemBuilder: (context, index) {
-                final pos = MockData.positions[index];
+            child: displayPositions.isEmpty 
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.query_stats, size: 64, color: AppColors.textMuted.withOpacity(0.3)),
+                      const SizedBox(height: 16),
+                      const Text('No active master trades detected', style: TextStyle(color: AppColors.textSecondary)),
+                      const SizedBox(height: 8),
+                      Text('Start a trade on your master account to see mirroring.', 
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  itemCount: displayPositions.length,
+                  itemBuilder: (context, index) {
+                final pos = displayPositions[index];
+                
+                // Calculate slave status
+                final slaves = pos['slaves'] as Map<String, dynamic>? ?? {};
+                final syncedSlaves = slaves.values.where((s) => s['status'] == 'filled').length;
+                final totalSlaves = slaves.isEmpty ? (pos['totalSlaves'] ?? 0) : slaves.length;
+                final failedSlaves = slaves.values.where((s) => s['status'] == 'failed').length;
+                final isRetrying = slaves.values.any((s) => s['status'] == 'retrying');
+
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 16.0),
                   child: AppCard(
-                    onTap: () => context.push('/positions/${pos.id}'),
+                    onTap: () => context.push('/positions/${pos['id']}'),
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
@@ -60,18 +76,25 @@ class PositionsListScreen extends StatelessWidget {
                                 Row(
                                   children: [
                                     Text(
-                                      pos.assetPair,
+                                      pos['symbol'],
                                       style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                                             fontWeight: FontWeight.w800,
                                           ),
                                     ),
                                     const SizedBox(width: 8),
                                     StatusBadge(
-                                      label: pos.side == TradeSide.buy ? 'LONG' : 'SHORT',
-                                      color: pos.side == TradeSide.buy
+                                      label: (pos['side'] as String).toUpperCase(),
+                                      color: pos['side'] == 'buy'
                                           ? AppColors.success
                                           : AppColors.danger,
                                     ),
+                                    if (isRetrying) ...[
+                                      const SizedBox(width: 8),
+                                      const StatusBadge(
+                                        label: 'RETRYING',
+                                        color: AppColors.warning,
+                                      ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 1.seconds),
+                                    ],
                                   ],
                                 ),
                                 const SizedBox(height: 4),
@@ -79,9 +102,9 @@ class PositionsListScreen extends StatelessWidget {
                                   children: [
                                     const Text('Master Size: '),
                                     Text(
-                                      '${pos.masterSize} ${pos.assetPair.split('/')[0]}',
-                                      style: const TextStyle(
-                                        color: AppColors.textPrimary,
+                                      '${pos['master_size'] ?? pos['masterSize'] ?? '0'} ${pos['symbol'].split('/')[0]}',
+                                      style: TextStyle(
+                                        color: Theme.of(context).textTheme.bodyLarge?.color,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -89,7 +112,10 @@ class PositionsListScreen extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            PnlText(pnl: pos.pnl, pnlPercent: pos.pnlPercent),
+                            PnlText(
+                              pnl: pos['pnl'] ?? 0.0, 
+                              pnlPercent: pos['pnlPercent'] ?? 0.0
+                            ),
                           ],
                         ),
                         const SizedBox(height: 20),
@@ -98,18 +124,18 @@ class PositionsListScreen extends StatelessWidget {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            _buildInfoItem(context, 'Entry', pos.entryPrice.toStringAsFixed(2)),
-                            _buildInfoItem(context, 'Current', pos.currentPrice.toStringAsFixed(2)),
+                            _buildInfoItem(context, 'Entry', (pos['entryPrice'] ?? 0.0).toStringAsFixed(2)),
+                            _buildInfoItem(context, 'Current', (pos['currentPrice'] ?? 0.0).toStringAsFixed(2)),
                             _buildInfoItem(
                               context,
                               'Slaves',
-                              '${pos.syncedSlaves}/${pos.totalSlaves}',
+                              '$syncedSlaves/$totalSlaves',
                               trailing: Icon(
                                 Icons.circle,
                                 size: 8,
-                                color: pos.failedSlaves > 0
+                                color: failedSlaves > 0
                                     ? AppColors.danger
-                                    : AppColors.success,
+                                    : (isRetrying ? AppColors.warning : AppColors.success),
                               ),
                             ),
                           ],
@@ -140,7 +166,6 @@ class PositionsListScreen extends StatelessWidget {
             Text(
               value,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: AppColors.textPrimary,
                     fontWeight: FontWeight.w700,
                   ),
             ),

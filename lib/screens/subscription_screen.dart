@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../theme/app_colors.dart';
 import '../../widgets/common_widgets.dart';
+import 'package:provider/provider.dart';
+import '../providers/subscription_provider.dart';
+import '../theme/app_colors.dart';
 
 class SubscriptionScreen extends StatelessWidget {
   const SubscriptionScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final subProvider = context.watch<SubscriptionProvider>();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Subscription'),
@@ -21,36 +25,47 @@ class SubscriptionScreen extends StatelessWidget {
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Mirror trades to more accounts with higher precision',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7)),
             ),
             const SizedBox(height: 40),
             _buildPlanCard(
               context,
-              'Basic',
               'Free',
-              'For casual traders',
-              ['Up to 2 Slaves', '1-minute latency', 'Community Support'],
-              isSelected: true,
+              'Trial',
+              '7-Day Experience',
+              ['1 Master Account', '1 Slave Account', '7-Day Access only'],
+              isSelected: subProvider.plan == SubscriptionPlan.free,
+              onSelect: () => _handlePlanSelection(context, subProvider, SubscriptionPlan.free),
+            ),
+            const SizedBox(height: 20),
+            _buildPlanCard(
+              context,
+              'Basic',
+              '\$19/mo',
+              'For small clusters',
+              ['1 Master Account', '5 Slave Accounts', 'Standard Priority Support'],
+              isSelected: subProvider.plan == SubscriptionPlan.basic,
+              onSelect: () => _handlePlanSelection(context, subProvider, SubscriptionPlan.basic),
             ),
             const SizedBox(height: 20),
             _buildPlanCard(
               context,
               'Pro',
-              '\$29/mo',
-              'For serious traders',
-              ['Up to 10 Slaves', 'Real-time Sync', 'Priority Support', 'Advanced Lot Sizing'],
+              '\$49/mo',
+              'Professional mirroring',
+              [
+                '1 Master Account', 
+                '10 Slave Accounts included', 
+                '\$5 per extra slave (>10)',
+                'Ultra-low Latency Sync',
+                'Priority Support'
+              ],
               isPopular: true,
-            ),
-            const SizedBox(height: 20),
-            _buildPlanCard(
-              context,
-              'Enterprise',
-              'Custom',
-              'For institutional needs',
-              ['Unlimited Slaves', 'Ultra-low Latency', 'Dedicated Manager', 'Custom API Integration'],
+              isSelected: subProvider.plan == SubscriptionPlan.pro,
+              onSelect: () => _handlePlanSelection(context, subProvider, SubscriptionPlan.pro),
             ),
           ],
         ),
@@ -66,11 +81,12 @@ class SubscriptionScreen extends StatelessWidget {
     List<String> features, {
     bool isSelected = false,
     bool isPopular = false,
+    required VoidCallback onSelect,
   }) {
     return AppCard(
       padding: const EdgeInsets.all(24),
-      border: isPopular ? Border.all(color: AppColors.primary, width: 2) : Border.all(color: AppColors.border),
-      color: isSelected ? AppColors.primary.withOpacity(0.05) : AppColors.surface,
+      border: isPopular ? Border.all(color: AppColors.primary, width: 2) : Border.all(color: Theme.of(context).dividerColor),
+      color: isSelected ? AppColors.primary.withOpacity(0.05) : Theme.of(context).cardTheme.color,
       child: Stack(
         children: [
           Column(
@@ -87,11 +103,11 @@ class SubscriptionScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  Text(price, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: isPopular ? AppColors.primary : AppColors.textPrimary)),
+                  Text(price, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: isPopular ? AppColors.primary : Theme.of(context).textTheme.titleLarge?.color)),
                 ],
               ),
               const SizedBox(height: 4),
-              Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              Text(subtitle, style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color)),
               const SizedBox(height: 24),
               const AppDivider(),
               const SizedBox(height: 24),
@@ -109,13 +125,17 @@ class SubscriptionScreen extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: isSelected ? null : () {},
+                  onPressed: isSelected ? null : onSelect,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isPopular ? AppColors.primary : AppColors.surface,
-                    foregroundColor: isPopular ? Colors.white : AppColors.textPrimary,
+                    backgroundColor: isPopular ? AppColors.primary : Theme.of(context).cardTheme.color,
+                    foregroundColor: isPopular ? Colors.white : AppColors.primary,
                     side: isPopular ? null : const BorderSide(color: AppColors.primary),
                   ),
-                  child: Text(isSelected ? 'Current Plan' : 'Select Plan'),
+                  child: Text(
+                    isSelected 
+                      ? 'Current Plan' 
+                      : (context.read<SubscriptionProvider>().isAdmin ? 'Select Plan' : 'Contact Support'),
+                  ),
                 ),
               ),
             ],
@@ -123,5 +143,22 @@ class SubscriptionScreen extends StatelessWidget {
         ],
       ),
     ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0);
+  }
+
+  void _handlePlanSelection(BuildContext context, SubscriptionProvider subProvider, SubscriptionPlan plan) {
+    if (subProvider.isAdmin) {
+      subProvider.setPlanOverride(plan);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('ADMIN: Plan switched to ${plan.name.toUpperCase()}'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+    } else {
+      // Logic for real users (e.g. open payment gateway)
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Real-world payment gateway would open here.')),
+      );
+    }
   }
 }

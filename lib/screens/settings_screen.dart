@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import '../../providers/settings_provider.dart';
+import '../../providers/sync_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/common_widgets.dart';
 
@@ -8,6 +11,9 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+    final syncProvider = context.watch<SyncProvider>();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
@@ -19,15 +25,43 @@ class SettingsScreen extends StatelessWidget {
             _buildProfileSection(context),
             const SizedBox(height: 32),
             _buildSettingsGroup(context, 'Account', [
-              _SettingItem(icon: Icons.person_outline, title: 'Profile Information', onTap: () {}),
-              _SettingItem(icon: Icons.security, title: 'Security & 2FA', onTap: () {}),
-              _SettingItem(icon: Icons.payment, title: 'Subscription Plan', onTap: () => context.push('/subscription')),
+              _SettingItem(
+                icon: Icons.person_outline, 
+                title: 'Profile Information', 
+                onTap: () {}
+              ),
+              _SettingItem(
+                icon: Icons.security, 
+                title: 'Security Center', 
+                onTap: () => context.push('/settings/security'),
+              ),
+              _SettingItem(
+                icon: Icons.hub_outlined, 
+                title: 'Bot Nexus', 
+                onTap: () => context.push('/p2p'),
+              ),
+              _SettingItem(
+                icon: Icons.payment, 
+                title: 'Subscription Plan', 
+                onTap: () => context.push('/subscription')
+              ),
             ]),
             const SizedBox(height: 24),
             _buildSettingsGroup(context, 'App Settings', [
-              _SettingItem(icon: Icons.notifications_none, title: 'Push Notifications', onTap: () {}),
-              _SettingItem(icon: Icons.language, title: 'Language', trailing: 'English', onTap: () {}),
-              _SettingItem(icon: Icons.dark_mode_outlined, title: 'Appearance', trailing: 'Dark', onTap: () {}),
+              _SettingItem(
+                icon: Icons.notifications_none, 
+                title: 'Push Notifications', 
+                onTap: () {}
+              ),
+              _SettingItem(
+                icon: Icons.dark_mode_outlined, 
+                title: 'Dark Mode', 
+                trailingWidget: Switch(
+                  value: settings.themeMode == ThemeMode.dark,
+                  onChanged: (val) => settings.setThemeMode(val ? ThemeMode.dark : ThemeMode.light),
+                ),
+                onTap: settings.toggleTheme,
+              ),
             ]),
             const SizedBox(height: 24),
             _buildSettingsGroup(context, 'Support', [
@@ -36,7 +70,10 @@ class SettingsScreen extends StatelessWidget {
             ]),
             const SizedBox(height: 48),
             TextButton(
-              onPressed: () {},
+              onPressed: () {
+                context.read<SyncProvider>().disconnect();
+                context.go('/login');
+              },
               child: const Text('Log Out', style: TextStyle(color: AppColors.danger)),
             ),
             const SizedBox(height: 12),
@@ -48,6 +85,7 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Widget _buildProfileSection(BuildContext context) {
+    final syncProvider = context.watch<SyncProvider>();
     return AppCard(
       padding: const EdgeInsets.all(20),
       child: Row(
@@ -58,12 +96,18 @@ class SettingsScreen extends StatelessWidget {
             child: const Icon(Icons.person, color: AppColors.primary, size: 32),
           ),
           const SizedBox(width: 16),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('John Doe', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                Text('john.doe@example.com', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                Text(
+                  syncProvider.userName ?? 'User', 
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)
+                ),
+                Text(
+                  syncProvider.userEmail ?? 'Not logged in', 
+                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)
+                ),
               ],
             ),
           ),
@@ -92,13 +136,13 @@ class SettingsScreen extends StatelessWidget {
               return Column(
                 children: [
                   ListTile(
-                    leading: Icon(item.icon, size: 22, color: AppColors.textPrimary),
+                    leading: Icon(item.icon, size: 22, color: Theme.of(context).iconTheme.color),
                     title: Text(item.title, style: const TextStyle(fontSize: 14)),
-                    trailing: Row(
+                    trailing: item.trailingWidget ?? Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (item.trailing != null)
-                          Text(item.trailing!, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                        if (item.trailingText != null)
+                          Text(item.trailingText!, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                         const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
                       ],
                     ),
@@ -118,8 +162,15 @@ class SettingsScreen extends StatelessWidget {
 class _SettingItem {
   final IconData icon;
   final String title;
-  final String? trailing;
+  final String? trailingText;
+  final Widget? trailingWidget;
   final VoidCallback onTap;
 
-  _SettingItem({required this.icon, required this.title, this.trailing, required this.onTap});
+  _SettingItem({
+    required this.icon, 
+    required this.title, 
+    this.trailingText, 
+    this.trailingWidget,
+    required this.onTap
+  });
 }

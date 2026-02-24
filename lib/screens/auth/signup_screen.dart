@@ -1,6 +1,12 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import '../../providers/sync_provider.dart';
+import '../../providers/subscription_provider.dart';
 import '../../theme/app_colors.dart';
+import '../../core/api_config.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -14,6 +20,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -21,6 +28,76 @@ class _SignupScreenState extends State<SignupScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleSignup() async {
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email and password are required')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    debugPrint('Signup process started for: ${_emailController.text}');
+    try {
+      debugPrint('Sending request to: ${ApiConfig.signupUrl}');
+      final response = await http.post(
+        Uri.parse(ApiConfig.signupUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': _emailController.text,
+          'password': _passwordController.text,
+          'name': _nameController.text,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      debugPrint('Response received: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final token = data['access_token'];
+        final userId = data['user_id'];
+        final name = data['name'];
+        final email = data['email'];
+        final isAdmin = data['is_admin'] ?? false;
+
+        if (mounted) {
+          debugPrint('Signup successful. Initializing sync for user: $userId');
+          final syncProvider = context.read<SyncProvider>();
+          await syncProvider.connect(
+            userId, 
+            token, 
+            subProvider: context.read<SubscriptionProvider>(),
+            userName: name,
+            userEmail: email,
+            isAdmin: isAdmin,
+          );
+          syncProvider.addCustomLog('Auth', 'Account created: ${_emailController.text}', isSuccess: true);
+          debugPrint('Sync initialized. Navigating to home.');
+          if (mounted) context.go('/');
+        }
+      } else {
+        final error = jsonDecode(response.body)['detail'] ?? 'Signup failed';
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error), backgroundColor: AppColors.danger),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        debugPrint('Signup failed with error: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e\nTarget: ${ApiConfig.signupUrl}'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -104,8 +181,14 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
               const SizedBox(height: 32),
               ElevatedButton(
-                onPressed: () => context.go('/'),
-                child: const Text('Sign Up'),
+                onPressed: _isLoading ? null : _handleSignup,
+                child: _isLoading 
+                    ? const SizedBox(
+                        height: 20, 
+                        width: 20, 
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)
+                      )
+                    : const Text('Sign Up'),
               ),
               const SizedBox(height: 24),
               Row(

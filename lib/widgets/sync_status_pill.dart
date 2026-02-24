@@ -1,30 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/sync_provider.dart';
+import '../providers/subscription_provider.dart';
 import '../theme/app_colors.dart';
 
 class SyncStatusPill extends StatelessWidget {
-  final String status;
-
-  const SyncStatusPill({super.key, required this.status});
+  const SyncStatusPill({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final syncProvider = context.watch<SyncProvider>();
+    final status = syncProvider.status;
+    final engineStatus = syncProvider.engineStatus;
+
     Color color;
-    switch (status) {
-      case 'Active':
-        color = AppColors.syncActive;
-        break;
-      case 'Delayed':
-        color = AppColors.syncDelayed;
-        break;
-      case 'Paused':
-        color = AppColors.syncPaused;
-        break;
-      default:
-        color = AppColors.textMuted;
+    String label;
+
+    if (status == SyncStatus.connected) {
+      color = AppColors.success;
+      label = 'ONLINE';
+    } else {
+      color = AppColors.danger;
+      label = 'OFFLINE';
     }
 
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildStatusBadge(context, label, color),
+        const SizedBox(width: 8),
+        _buildSubscriptionBadge(context),
+      ],
+    );
+  }
+
+  Widget _buildStatusBadge(BuildContext context, String label, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
@@ -34,30 +46,48 @@ class SyncStatusPill extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 8,
-            height: 8,
+            width: 6,
+            height: 6,
             decoration: BoxDecoration(
               color: color,
               shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: color.withOpacity(0.4),
-                  blurRadius: 4,
-                  spreadRadius: 1,
-                ),
-              ],
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           Text(
-            status,
+            label,
             style: TextStyle(
               color: color,
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w600,
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSubscriptionBadge(BuildContext context) {
+    final subProvider = context.watch<SubscriptionProvider>();
+    final isExpired = subProvider.isExpired;
+    final color = isExpired ? AppColors.danger : AppColors.success;
+    final label = isExpired ? 'EXPIRED' : 'ACTIVATED: ${subProvider.planName}';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.5), width: 1),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }

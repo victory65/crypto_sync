@@ -26,9 +26,11 @@ class AppCard extends StatelessWidget {
       child: Container(
         padding: padding ?? const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: color ?? AppColors.card,
+          color: color ?? Theme.of(context).cardTheme.color,
           borderRadius: BorderRadius.circular(borderRadius),
-          border: border,
+          border: border ?? (Theme.of(context).brightness == Brightness.light 
+              ? Border.all(color: const Color(0xFFE5E7EB)) 
+              : null),
         ),
         child: child,
       ),
@@ -39,15 +41,19 @@ class AppCard extends StatelessWidget {
 class StatusBadge extends StatelessWidget {
   final String label;
   final Color color;
+  final Color? textColor;
   final IconData? icon;
   final bool small;
+  final bool glow;
 
   const StatusBadge({
     super.key,
     required this.label,
     required this.color,
+    this.textColor,
     this.icon,
     this.small = false,
+    this.glow = false,
   });
 
   @override
@@ -61,6 +67,13 @@ class StatusBadge extends StatelessWidget {
         color: color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: color.withOpacity(0.25), width: 1),
+        boxShadow: glow ? [
+          BoxShadow(
+            color: color.withOpacity(0.4),
+            blurRadius: 8,
+            spreadRadius: 0,
+          ),
+        ] : null,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -74,7 +87,7 @@ class StatusBadge extends StatelessWidget {
             style: TextStyle(
               fontSize: small ? 10 : 11,
               fontWeight: FontWeight.w600,
-              color: color,
+              color: textColor ?? color,
             ),
           ),
         ],
@@ -167,13 +180,13 @@ class PnlText extends StatelessWidget {
 class SectionHeader extends StatelessWidget {
   final String title;
   final String? actionLabel;
-  final VoidCallback? onAction;
+  final VoidCallback? onActionTap;
 
   const SectionHeader({
     super.key,
     required this.title,
     this.actionLabel,
-    this.onAction,
+    this.onActionTap,
   });
 
   @override
@@ -181,17 +194,20 @@ class SectionHeader extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
+        Expanded(
+          child: Text(
+            title,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
         if (actionLabel != null)
           GestureDetector(
-            onTap: onAction,
+            onTap: onActionTap,
             child: Text(
               actionLabel!,
               style: const TextStyle(
@@ -213,7 +229,7 @@ class AppDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 1,
-      color: AppColors.divider,
+      color: Theme.of(context).dividerTheme.color ?? (Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1F2937) : const Color(0xFFE5E7EB)),
     );
   }
 }
@@ -225,7 +241,7 @@ class LoadingOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: AppColors.background.withOpacity(0.9),
+      color: Theme.of(context).scaffoldBackgroundColor.withOpacity(0.95),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -279,7 +295,7 @@ class GradientButton extends StatelessWidget {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: onPressed == null
-                ? [AppColors.textMuted, AppColors.textDisabled]
+                ? [Theme.of(context).disabledColor, Theme.of(context).disabledColor.withOpacity(0.5)]
                 : [
                     startColor ?? AppColors.primary,
                     endColor ?? AppColors.primaryDark,

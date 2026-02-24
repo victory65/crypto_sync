@@ -3,13 +3,21 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/common_widgets.dart';
-import '../../data/mock_data.dart';
+import 'package:provider/provider.dart';
+import '../../models/trade_models.dart';
+import '../../providers/sync_provider.dart';
 
 class TradePreviewSyncScreen extends StatelessWidget {
   const TradePreviewSyncScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final syncProvider = context.watch<SyncProvider>();
+    final activeSlaves = syncProvider.accounts.where((a) {
+      final slave = Map<String, dynamic>.from(a as Map);
+      return slave['enabled'] == true && slave['is_master'] != true;
+    }).toList();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Preview Sync'),
@@ -23,11 +31,11 @@ class TradePreviewSyncScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildTradeHeader(context),
+            _buildTradeHeader(context, syncProvider),
             const SizedBox(height: 32),
-            const SectionHeader(title: 'Syncing to 5 Slaves'),
+            SectionHeader(title: 'Syncing to ${activeSlaves.length} Slaves'),
             const SizedBox(height: 16),
-            _buildSlaveList(context),
+            _buildSlaveList(context, activeSlaves),
             const SizedBox(height: 32),
             _buildWarningCard(),
             const SizedBox(height: 48),
@@ -43,7 +51,7 @@ class TradePreviewSyncScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildTradeHeader(BuildContext context) {
+  Widget _buildTradeHeader(BuildContext context, SyncProvider syncProvider) {
     return AppCard(
       padding: const EdgeInsets.all(24),
       color: AppColors.surface,
@@ -69,7 +77,7 @@ class TradePreviewSyncScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _buildLargeStat(context, 'Total Size', '0.50 BTC'),
-              _buildLargeStat(context, 'Est. Master Cost', '\$21,450'),
+              _buildLargeStat(context, 'Est. Master Cost', '${syncProvider.currencySymbol}21,450'),
             ],
           ),
         ],
@@ -87,19 +95,22 @@ class TradePreviewSyncScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSlaveList(BuildContext context) {
+  Widget _buildSlaveList(BuildContext context, List<dynamic> slaves) {
     return Column(
-      children: MockData.slaveAccounts.map((slave) {
+      children: slaves.map((a) {
+        final slave = Map<String, dynamic>.from(a as Map);
+        final lotSize = (slave['lot_size'] ?? 1.0).toDouble();
+        
         return Padding(
           padding: const EdgeInsets.only(bottom: 8.0),
           child: Row(
             children: [
               const Icon(Icons.check_circle, color: AppColors.success, size: 16),
               const SizedBox(width: 12),
-              Text(slave.exchangeName, style: const TextStyle(fontWeight: FontWeight.w500)),
+              Text(slave['exchange'] ?? 'Exchange', style: const TextStyle(fontWeight: FontWeight.w500)),
               const Spacer(),
               Text(
-                'Size: ${slave.lotSizeMode == LotSizeMode.fixed ? slave.defaultLotSize : '${slave.defaultLotSize}%'}',
+                'Size: ${(lotSize * 100).toStringAsFixed(0)}%',
                 style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
             ],

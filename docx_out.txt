@@ -1,0 +1,969 @@
+Now we’re done designing.
+What we did was not “add screens.”
+We designed:
+• System behavior• Risk philosophy• Sync architecture• UI structure based on real execution logic• Lot sizing control model• Failure transparency model
+Now I’ll give you the full structured product write-up.
+This is your internal product blueprint.
+CRYPTO SYNC
+Master–Slave Real-Time Trade Mirroring System
+Full Product & Screen Architecture Documentation
+1. Product Identity
+Crypto Sync is a mobile-only application that:
+• Connects multiple crypto exchange accounts• Assigns one Master account• Assigns multiple Slave accounts• Automatically mirrors Master trades instantly• Supports both:
+Trades placed inside the app
+Trades placed externally on the Master exchange• Allows per-slave lot size configuration• Monitors sync health and position status• Handles failed mirroring transparently
+This is NOT a portfolio tracker.
+This is a real-time trade replication engine with monitoring.
+2. Core System Behavior
+Master–Slave Model
+1 Master account
+5–10+ Slave accounts (subscription based)
+When Master opens or closes a position:
+System immediately:
+Detects the trade (via API / WebSocket)
+Reads trade type (Spot or Futures)
+Reads each slave’s lot size configuration
+Sends trade to all active slaves
+Returns execution result per slave
+Displays real-time sync status in UI
+There is NO confirmation for external trades.
+Mirroring is automatic.
+3. Lot Size Logic (Critical Design)
+Each Slave account must define its own Default Lot Size.
+Two supported modes:
+A) Fixed Lot SizeExample: 0.05 BTC every mirrored trade
+B) Percentage of BalanceExample: 15% of available balance
+The user is responsible for calculating risk.
+The app does NOT calculate risk.
+Lot size must be:
+• Mandatory during slave setup• Easily visible on slave cards• Editable anytime• Visible in Position Detail screen
+Failure due to insufficient funds is expected and shown transparently.
+4. Instant Execution Model
+When trade occurs:
+Orders are sent immediately to all slaves
+No queue
+No delay
+No confirmation step for external trades
+Execution outcomes per slave may be:
+• Filled• Partial Fill• Rejected (insufficient funds)• API Error• Disabled
+The UI must reflect per-account execution state.
+5. App Navigation Architecture
+Bottom Navigation Tabs (Final Structure)
+Dashboard
+Positions
+Accounts
+Settings
+No separate Trade tab.Manual trades are initiated from Master Account screen.
+6. Screen-by-Screen Architecture
+AUTH FLOW
+Splash Screen
+Logo
+Tagline
+Dark mode default
+Login Screen
+Email
+Password
+Login button
+Biometric option
+Signup Screen
+Email
+Password
+Confirm password
+MAIN APPLICATION
+1️⃣ Dashboard
+Purpose:System overview and health monitoring.
+Contains:
+• Total Portfolio Value• Growth chart (24h / 7d / 30d toggle)• Master account summary• Sync Engine Status indicator:
+Active (Green)
+Delayed (Yellow)
+Error (Red)• Recent mirrored trades• Alert banner for failed slaves
+This screen answers:“Is everything working?”
+2️⃣ Positions
+Purpose:Monitor live open positions and slave sync state.
+Each Position Card shows:
+• Asset pair• Master size• Entry price• PNL• Slave sync summary:
+8 Synced | 2 Failed
+Tap → Position Detail Screen
+Position Detail Screen
+Top section:Master position details
+Below:List of slave accounts:
+For each slave:• Exchange name• Lot size used• Execution status• Error reason (if failed)
+Allows:• Close Position (mirrors close across all slaves)
+This is the transparency layer.
+3️⃣ Accounts
+Purpose:Manage Master and Slave accounts.
+Top Section:Master Account Card
+Exchange name
+Balance
+Trade type
+“Open Trade” button
+Below:Slave Accounts List
+Each Slave Card shows:• Exchange name• Balance• Default Lot Size (very visible)• Sync toggle• Status indicator• Quick Edit Lot Size button
+Tap → Slave Detail Screen
+Slave Detail Screen
+Contains:
+• Default Lot Size
+Fixed amount input
+Percentage input
+Mode selector (Fixed / Percentage)• Trade type allowed (Spot / Futures)• Enable/Disable sync• Remove account
+Lot size explanation:“This size is used for every mirrored trade.”
+Add Account Flow
+Select Exchange
+Enter API Keys
+Set Default Lot Size (mandatory)
+Confirm
+User cannot finish without setting lot size.
+4️⃣ Manual Trade Flow
+Manual trades are initiated from:
+Master Account → “Open Position”
+Trade Setup Screen
+Fields:• Asset pair• Buy / Sell• Spot / Futures toggle• Order type (Market / Limit)• Amount
+Primary button:“Preview Sync”
+Trade Preview Screen
+Shows:
+Master:• Order summary
+Slaves:• Estimated execution size per slave• Lot size applied• Balance check• Status (Ready / Risk)
+Primary button:“Execute Now”
+Live Execution Screen
+Real-time per-account status updates:
+Master:Submitted → Filled
+Slaves:Submitted → FilledRejected (Insufficient funds)Partial Fill
+Only when all resolved:Show “Done”
+5️⃣ Settings
+Contains:
+• Auto-Sync toggle• Default trade mode• Subscription• Theme (Dark / Light)• Security• Notifications• Logout
+Automation logic lives here.Not in a separate tab.
+6️⃣ Subscription Screen
+Plans:
+Free: 1 Master Account 1 Slave account for 7days only
+Basic:
+1 Master
+5 slave accounts
+Pro:
+1 Master
+10 slave accounts, if slave account more than 10, 10+ 1 = $5 per slave account, if the slave account is more than 10
+Triggered when:
+User tries to exceed account limit
+Or from Settings
+7. System Status Layer
+App must include a persistent Sync Status Indicator:
+🟢 Active🟡 Delayed🔴 Error
+Visible in Dashboard and Positions.
+Trust depends on this.
+8. UX Philosophy
+This app must feel:
+• Professional• Serious• Minimal• Transparent• Data-driven• Not playful• Dark-mode first
+This is a financial control tool.
+Not a social app.
+9. Final Screen Count
+Auth: 3Main Tabs: 4Core Detail Screens: 6–8Subscription: 1
+Total: ~11–13 structured screens.
+Lean.Scalable.Production-ready.
+10. Are We Done?
+We are done with:
+✔ Product architecture✔ Screen structure✔ Lot size model✔ Instant execution logic✔ Failure handling visibility✔ Subscription gating✔ Automation placement
+But we are NOT done with:
+• Backend architecture decisions• WebSocket vs polling design• Latency handling strategy• Legal risk positioning• Error recovery design
+If you want to go deeper, the next step is:
+Do we design backend architecture now,or do you want to finalize UI flow details further?
+A — Calm & Minimal UX.
+That means:
+We do NOT show technical chaos on main screens.
+We surface complexity only when necessary.
+We reduce visual noise.
+We keep power hidden but accessible.
+Errors are visible but not overwhelming.
+refine your entire product blueprint and integrate:
+✔ Calm UX philosophy✔ Error handling fixes✔ Unexpected event handling✔ Edge-case UI responses✔ Clean state layering
+This is now your finalized frontend product spec.
+CRYPTO SYNC
+Master–Slave Real-Time Trade Mirroring System
+Final Frontend Architecture (Calm UX Edition)
+1. Product Identity
+Crypto Sync is a mobile-first, real-time trade mirroring engine.
+It:
+• Connects one Master exchange• Connects multiple Slave exchanges• Automatically mirrors trades instantly• Mirrors both in-app and external trades• Uses per-slave lot size configuration• Handles failures silently but transparently• Prioritizes calm monitoring over noisy technical detail
+This is not a trading app.
+This is a trade control system.
+2. UX Philosophy (Calm & Minimal)
+The interface must:
+• Show only what matters at surface level• Hide per-account technical details by default• Use aggregated status summaries• Avoid red walls of error messages• Avoid flashing alerts• Surface problems gently but clearly• Allow deep inspection only when tapped
+Think:
+“Professional control panel”Not“Developer debug console”
+3. System Behavior (Unchanged Logic)
+Master–Slave Model:
+• 1 Master account• 5–10+ Slaves (subscription-based)• Instant replication• No confirmation for external trades• Lot size applied per slave
+Execution outcomes per slave:
+• Filled• Partial• Failed (Insufficient balance)• API error• Disabled
+But now we control how this is shown.
+4. Error Handling – Calm UX Integration
+We redesign every error type to fit minimal UX.
+A. Account-Level Errors
+Invalid API Key
+Instead of red explosion:
+Slave Card shows:• Small amber dot indicator• Label: “Needs Attention”
+Dashboard:• Small banner:“1 account requires action”
+Tap → Slave DetailThen show technical explanation.
+We do NOT show API stack errors on main screen.
+Insufficient Balance
+During execution:
+Positions screen:• Shows “Partial Sync” quietly
+Position Detail:• Shows per-slave failure explanation
+No global alarm.No modal explosion.Just clear, structured info.
+Exchange Downtime
+Dashboard Sync Indicator:
+🟡 “Sync Delayed”
+Small subtext:“Exchange connectivity issue detected.”
+No dramatic red until persistent failure.
+5. Sync Engine Status Layer (Calm Version)
+Top of Dashboard + Positions:
+Small horizontal status pill:
+🟢 Sync Active🟡 Sync Delayed🔴 Sync Paused
+Tap → opens System Status Drawer
+Inside Drawer:
+Connection status
+Last sync time
+Affected exchanges
+Retry attempts
+Hidden by default.
+Visible on demand.
+6. Position Mismatch Handling (Very Important)
+If slave position deviates:
+Positions screen:• Badge: “Sync Warning”
+Position Detail:• Subtle section:“1 account out of sync”
+Tap to expand details.
+User options:• Re-sync• Ignore• Disable slave
+No forced action.
+7. Execution Flow (Calm Redesign)
+Manual Trade:
+Trade Setup → Preview → Execute → Execution Screen
+Execution Screen:
+Instead of flashing status:
+Show:• Progress list• Smooth status updates• Final summary card:
+“7 of 8 accounts synced successfully”
+Button:“View Details”
+Minimal surface.Deep detail behind tap.
+8. Unexpected Events Handling (Integrated)
+App Closed During Execution
+When reopened:
+If execution ongoing:→ Automatically show Execution Status screen.
+If finished:→ Show summary banner:“Last sync completed.”
+Never assume success silently.
+No Internet
+Full-screen minimal state:
+“No Internet Connection”Retry button.
+Disable trade buttons.
+Rapid Multiple Trades
+If Master opens multiple positions fast:
+Positions screen groups them:
+“3 Active Positions”Tap to expand.
+No stacked modals.
+Slave Disabled Mid-Execution
+Execution screen:“1 account skipped (disabled)”
+Calm gray tone.
+9. Subscription Flow (Calm Integration)
+When limit reached:
+Instead of blocking harshly:
+Free: 1 Master Account 1 Slave account for 7days only
+Basic:
+1 Master
+5 slave accounts
+Pro:
+1 Master
+10 slave accounts, if slave account more than 10, 10+ 1 = $5 per slave account, if the slave account is more than 10
+Modal:
+“You’ve reached the Free plan limit (1 slaves for 7days).Upgrade to add more accounts.”
+Two buttons:• Upgrade• Later
+If expired:
+Dashboard:Small red banner:“Sync paused – subscription expired.”
+Clear.Not dramatic.
+10. Final Screen Architecture (Stable)
+AUTH:
+Splash
+Login
+Signup
+MAIN TABS:
+Dashboard
+Positions
+Accounts
+Settings
+DETAIL SCREENS:5. Master Detail6. Slave Detail7. Add Account8. Trade Setup9. Trade Preview10. Execution Status11. Position Detail12. Subscription
+Total: 12 core screens.
+11. Visual Philosophy
+Dark mode primary.
+Visual traits:
+• Deep background• Subtle card elevation• Rounded 16–20px corners• Status indicators as small pills• No flashing animations• Smooth transitions• Muted error tones• Bold typography for numbers only
+Data is the hero.
+12. Final State Matrix (Frontend Stability Checklist)
+You must visually handle:
+✔ Invalid API✔ Insufficient funds✔ Rate limit✔ Exchange offline✔ Partial sync✔ Position mismatch✔ App closed mid-sync✔ No internet✔ Subscription expired✔ Rapid multiple trades✔ Lot size below exchange minimum
+All without breaking calm UX.
+13. Are We Frontend Complete?
+Yes.
+You now have:
+• Clear navigation• Defined screen set• Error behavior philosophy• Failure visibility strategy• Sync state layering• Lot size UX logic• Execution flow• Subscription gating• Calm system health model
+This is a real product architecture.
+Now I’ll ask one final frontend question:
+Do you want the app to show:
+Perfect.
+Now we’ll finalize the Dashboard architecture properly — calm, structured, and powerful — while supporting both:
+• Combined total portfolio• Master total• Slave total (aggregated)
+Without clutter.
+✅ FINAL DASHBOARD ARCHITECTURE
+(Calm UX + Dual Totals Integrated)
+The Dashboard must answer 3 things instantly:
+How much am I worth?
+Is sync healthy?
+Are my positions aligned?
+Everything else is secondary.
+🧱 Dashboard Layout Structure
+🔹 1. Top Status Bar (Persistent, Minimal)
+Small horizontal pill:
+🟢 Sync Active🟡 Sync Delayed🔴 Sync Paused
+Tap → opens System Status Drawer.
+Calm. Non-invasive.
+🔹 2. Total Portfolio Card (Primary Focus)
+Large bold number:
+$248,430.21+2.3% (24h)
+Below it — segmented toggle:
+[ Combined ] [ Master ] [ Slaves ]
+Default = Combined.
+This lets user switch views without leaving screen.
+When toggled:
+• Combined → Sum of all accounts• Master → Only master account value• Slaves → Sum of all slave accounts
+No navigation change.Just data switch.
+This keeps UI clean.
+🔹 3. Growth Chart
+Under total card.
+Chart updates based on toggle selection.
+So:
+If “Master” selected → chart reflects master growth only.
+This is powerful but calm.
+🔹 4. Account Summary Strip
+Small horizontal cards:
+Master:$120,000
+Slaves:$128,430
+Tapping either:→ Navigates to Accounts tab
+This reinforces separation visually.
+🔹 5. Active Positions Summary
+Simple section:
+“Active Positions: 4”
+Under it:Mini list (collapsed by default)
+Example:BTC/USDT – SyncedETH/USDT – Partial
+If any partial/mismatch:Show small amber badge.
+No full error wall.
+Tap → Positions tab.
+🔹 6. Alerts Section (Conditional)
+Only appears if needed.
+Examples:• “1 account needs attention”• “Subscription expiring in 3 days”• “1 position out of sync”
+Soft amber tone.Not alarming.
+Hidden if no issues.
+🎯 Why This Works
+This gives:
+✔ Combined view for overall performance✔ Clear separation for master vs slaves✔ No clutter✔ No extra tab✔ No cognitive overload✔ Immediate system health awareness
+🧠 Now Important Design Decision
+Perfect.
+Now we’ll finalize the Dashboard architecture properly — calm, structured, and powerful — while supporting both:
+• Combined total portfolio• Master total• Slave total (aggregated)
+Without clutter.
+✅ FINAL DASHBOARD ARCHITECTURE
+(Calm UX + Dual Totals Integrated)
+The Dashboard must answer 3 things instantly:
+How much am I worth?
+Is sync healthy?
+Are my positions aligned?
+Everything else is secondary.
+🧱 Dashboard Layout Structure
+🔹 1. Top Status Bar (Persistent, Minimal)
+Small horizontal pill:
+🟢 Sync Active🟡 Sync Delayed🔴 Sync Paused
+Tap → opens System Status Drawer.
+Calm. Non-invasive.
+🔹 2. Total Portfolio Card (Primary Focus)
+Large bold number:
+$248,430.21+2.3% (24h)
+Below it — segmented toggle:
+[ Combined ] [ Master ] [ Slaves ]
+Default = Combined.
+This lets user switch views without leaving screen.
+When toggled:
+• Combined → Sum of all accounts• Master → Only master account value• Slaves → Sum of all slave accounts
+No navigation change.Just data switch.
+This keeps UI clean.
+🔹 3. Growth Chart
+Under total card.
+Chart updates based on toggle selection.
+So:
+If “Master” selected → chart reflects master growth only.
+This is powerful but calm.
+🔹 4. Account Summary Strip
+Small horizontal cards:
+Master:$120,000
+Slaves:$128,430
+Tapping either:→ Navigates to Accounts tab
+This reinforces separation visually.
+🔹 5. Active Positions Summary
+Simple section:
+“Active Positions: 4”
+Under it:Mini list (collapsed by default)
+Example:BTC/USDT – SyncedETH/USDT – Partial
+If any partial/mismatch:Show small amber badge.
+No full error wall.
+Tap → Positions tab.
+🔹 6. Alerts Section (Conditional)
+Only appears if needed.
+Examples:• “1 account needs attention”• “Subscription expiring in 3 days”• “1 position out of sync”
+Soft amber tone.Not alarming.
+Hidden if no issues.
+🎯 Why This Works
+This gives:
+✔ Combined view for overall performance✔ Clear separation for master vs slaves✔ No clutter✔ No extra tab✔ No cognitive overload✔ Immediate system health awareness
+🧠 Now Important Design Decision
+Absolutely — let’s break the master prompt into screen-by-screen AI prompts, so each screen can be generated individually with Figma AI, Manus, or similar tools. I’ll keep the calm, minimal, dark-mode-first UX philosophy, real-time data placeholders, and dual portfolio totals in mind.
+Screen 1 — Splash Screen
+Design a mobile Splash Screen for the app "Crypto Sync". Dark mode, professional, calm, minimal. Center the app logo and tagline: "Sync Your Crypto Trades Effortlessly". Background: subtle dark gradient, optionally crypto-themed abstract icons. Minimal fade-in animation only. No flashy effects. Smooth and clean layout.
+Screen 2 — Login Screen
+Design a mobile Login Screen for "Crypto Sync". Centered card layout on dark gradient background. Include:
+- Email input
+- Password input with show/hide toggle
+- Login button in primary green
+- Biometric login option
+- Link to Sign Up
+- Subtle inline error placeholders in red
+Professional, calm, minimal, dark-mode-first, card-based with rounded corners.
+Screen 3 — Signup Screen
+Design a mobile Signup Screen for "Crypto Sync". Dark mode, minimal and professional. Include:
+- Email input
+- Password input
+- Confirm password input
+- Optional phone input for 2FA (with country code selector)
+- Checkbox to agree to terms
+- Sign Up button
+- Link to Login
+- Optional multi-step progress indicator
+Subtle background icons or gradient, rounded card layout, calm UX, no flashing animations.
+Screen 4 — Dashboard
+Design the main Dashboard for "Crypto Sync" mobile app, calm UX, dark mode. Include:
+- Top Sync Status Pill (🟢 Active / 🟡 Delayed / 🔴 Paused)
+- Total Portfolio Card (large bold number) with toggle: [Combined | Master | Slaves]
+  - Combined includes unrealized PNL
+- Growth chart (24h / 7d / 30d toggle) reflecting toggle selection
+- Account summary strip (Master card + Slaves card, tapping navigates to Accounts)
+- Active Positions summary (collapsed by default, mini-list)
+- Conditional alerts (subtle amber banners for account attention, subscription reminders, position mismatch)
+- Rounded cards, clean typography, calm data-driven presentation, smooth transitions
+Screen 5 — Positions Screen
+Design the Positions Screen for "Crypto Sync". Dark mode, minimal, calm. Include:
+- List of active positions as cards:
+  - Asset pair
+  - Master size
+  - Entry price
+  - PNL
+  - Sync summary: e.g., "8 Synced | 2 Failed" with subtle amber for partial
+- Tap card → Position Detail Screen
+- Rounded card layout, subtle shadows, calm status indicators
+Screen 6 — Position Detail Screen
+Design the Position Detail Screen. Dark mode, calm, minimal. Include:
+- Top: Master position details (Asset, Size, Entry, PNL)
+- Below: List of Slave accounts:
+  - Exchange name
+  - Lot size used
+  - Execution status (Filled / Partial / Rejected)
+  - Subtle error explanation if failed
+- Close Position button (mirrors across all slaves)
+- Collapsible details for failed/partial slaves
+- Smooth, professional card layout
+Screen 7 — Accounts Screen
+Design the Accounts Screen for "Crypto Sync". Dark mode, minimal, calm. Include:
+- Master Account Card: Exchange, Balance, Trade type, Open Trade button
+- List of Slave Accounts as cards:
+  - Exchange name
+  - Balance
+  - Default Lot Size (prominent)
+  - Sync toggle
+  - Status indicator
+  - Quick Edit Lot Size button
+- Tap → Slave Detail Screen
+- Rounded cards, subtle shadows, smooth transitions, professional feel
+Screen 8 — Slave Detail Screen
+Design the Slave Detail Screen. Dark mode, calm, minimal. Include:
+- Default Lot Size:
+  - Input for Fixed amount
+  - Input for Percentage
+  - Mode selector (Fixed / Percentage)
+- Trade type allowed (Spot / Futures)
+- Enable/Disable sync toggle
+- Remove account button
+- Subtle explanation: "This size is used for every mirrored trade"
+- Subtle error indicators if sync fails
+- Professional rounded card layout
+Screen 9 — Add Account Flow
+Design Add Account Flow Screen. Dark mode, calm UX. Include:
+1. Select Exchange (dropdown or cards with icons)
+2. Enter API Keys (Key + Secret)
+3. Set Default Lot Size (mandatory)
+4. Confirm button (disabled until lot size set)
+Rounded card layout, subtle shadows, minimal interface, professional look.
+Screen 10 — Trade Setup Screen
+Design the Manual Trade Setup Screen. Dark mode, calm UX. Include:
+- Asset pair dropdown
+- Buy / Sell toggle
+- Spot / Futures toggle
+- Order type (Market / Limit)
+- Amount input
+- Primary button: "Preview Sync"
+- Minimal, professional layout with rounded cards
+- Real-time validation placeholders (lot size, balance)
+Screen 11 — Trade Preview / Execution Screen
+Design Trade Preview & Execution Screen. Dark mode, calm UX. Include:
+- Master order summary
+- Slave accounts estimated execution:
+  - Lot size applied
+  - Balance check
+  - Ready / Risk status
+- Primary button: "Execute Now"
+- Live Execution: per-account status updates (Filled / Partial / Rejected)
+- Final summary card showing result across all accounts
+- Smooth progress list, calm colors, rounded cards
+Screen 12 — Settings Screen
+Design Settings Screen for "Crypto Sync". Dark mode, calm, minimal. Include:
+- Auto-Sync toggle
+- Default trade mode selector
+- Subscription overview
+- Theme toggle (Dark / Light)
+- Security settings
+- Notifications settings
+- Logout button
+Accordion or list layout, professional rounded cards, smooth transitions
+Screen 13 — Subscription Screen
+Design Subscription Screen. Dark mode, calm UX. Include:
+- Free Plan: 1 Master, 1 Slave Accounts
+- Basic Plan: 1 Master, 5 Slave Accounts
+- Pro Plan: 1 Master 10+ Unlimited if more than 10, for every account user have to pay $5per account(11 + $5, 12a + $5 =$10) if slave is more than 10
+- Triggered when account limit reached or user clicks upgrade
+- Subtle modal for upgrade or expiration warning
+- Soft amber tone for attention, no alarming red
+- Rounded cards, minimal typography
+✅ These 13 screen-specific prompts can be fed one by one to an AI like Figma AI or Manus to generate the entire mobile UI.
+Each screen:
+Follows calm UX philosophy
+Is dark-mode-first
+Uses rounded cards, smooth transitions, subtle status indicators
+Supports real-time data placeholders
+I I also create a “visual style reference table” for all 13 screens with:
+Exact colors for primary, secondary, error, and warning
+Card sizes
+Typography sizes
+Icon suggestions
+Button placement
+🎨 DESIGN SYSTEM
+Create a design system first:
+Colors (Dark Mode Primary)
+Background: #0B0F1A
+Surface: #111827
+Card: #1F2937
+Primary Accent: #3B82F6
+Success: #10B981
+Danger: #EF4444
+Warning: #F59E0B
+Text Primary: #FFFFFF
+Text Secondary: #9CA3AF
+Divider: #1F2937
+Typography
+Use modern sans-serif (Inter or similar)
+Create text styles:
+H1 (24 Bold)
+H2 (20 SemiBold)
+H3 (18 Medium)
+Body (16 Regular)
+Caption (14 Regular)
+Small (12 Regular)
+Components (Create as reusable components with variants)
+Buttons (Primary, Secondary, Danger, Disabled)
+Input fields (Default, Focused, Error)
+Dropdown selector
+Toggle switch
+Tabs
+Bottom navigation bar
+Top navigation bar
+Cards
+List item row
+Status badge (Success, Pending, Failed)
+Modal sheet
+Confirmation dialog
+Toast notification
+Search bar
+All components must use Auto Layout and constraints.
+For you Anti gravity
+The Prompt for Anti Gravity AI
+Role: You are a Senior Flutter Developer and UI/UX Specialist. Task: Build a high-fidelity Flutter frontend for "Crypto Sync," a professional master-slave trade mirroring application.
+Design Philosophy (Calm UX):
+Tone: Professional, serious, minimal, and data-driven. Not "playful" or social.
++1
+Visuals: Dark-mode first. Use deep backgrounds (#0B0F1A), surface colors (#111827), and cards (#1F2937) .
+Elements: 16–20px rounded corners, smooth transitions, and muted error tones (amber instead of "alarm red").
+Typography: Modern Sans-serif (Inter). Primary text is White; secondary is Muted Gray (#9CA3AF) .
+Global Components to Implement:
+Sync Status Pill: A persistent horizontal indicator (🟢 Active, 🟡 Delayed, 🔴 Paused) for the Dashboard and Positions screens.
++1
+Navigation: Bottom Navigation bar with four tabs: Dashboard, Positions, Accounts, and Settings .
+Key Screen Requirements (Execute these 13 screens):
+Dashboard: Must feature a "Total Portfolio Card" with a segmented toggle for [Combined | Master | Slaves] to switch data views without navigating. Include a growth chart that updates based on this toggle .
++2
+Positions: A list of active trade cards showing Asset Pair, PNL, and a "Slave Sync Summary" (e.g., "8 Synced | 2 Failed") .
+Position Detail: A transparency layer showing the Master trade at the top and a per-slave breakdown of execution status and lot sizes .
+Accounts & Slave Detail: Master account card at the top, followed by Slave cards with highly visible "Default Lot Size" and sync toggles. Slave details must allow switching between "Fixed" and "Percentage of Balance" modes .
++2
+Trade Flow: A multi-step process from Trade Setup → Preview (showing estimated sizes per slave) → Live Execution Screen with real-time status updates for every account.
++2
+Subscription: Tiered plans (Free, Basic, Pro) with logic for handling 10+ slaves at $5/extra slave .
+Technical Instructions:
+Use a clean, modular folder structure (lib/widgets, lib/screens, lib/theme).
+Implement ThemeData specifically for the Dark Mode palette defined in the docs.
+Ensure all cards use Auto Layout equivalents in Flutter (Rows/Columns with consistent padding).
+Create reusable widgets for "Status Badges" and "Account Cards" to ensure UI consistency.
+ BACKEND
+Perfect, now we’re getting into the backend architecture, and your notes are already pointing toward a scalable, secure, and modular Python-based system. Let’s break this down carefully. I’ll organize it around users, services, security, scaling, and communication.
+1️⃣ Overall Architecture Philosophy
+Goals:
+Support 1000+ users with multiple accounts per user.
+Modular design: User DB layer separated from Trading Service layer (CCXT).
+Easy migration to another server with minimal downtime and zero user loss.
+High security: protect API keys and secrets from hackers.
+Python-only (no Docker) running in terminal or systemd service.
+High-level Concept:
++---------------------+       +----------------------+
+|  User DB Service    | <---> |  Trade Service (CCXT)|
+|  - Handles users    |       |  - Executes trades   |
+|  - Handles accounts |       |  - Mirrors trades    |
+|  - Stores API keys  |       |  - Maintains state   |
++---------------------+       +----------------------+
+          ^                           ^
+          |                           |
+   Frontend App UI              Communication API
+       (Mobile)                   (Internal Protocol)
+Two independent Python processes communicating via:
+TCP sockets, ZeroMQ, or REST API (local server-to-server communication)
+Message queue optional (RabbitMQ or Redis Pub/Sub) if scaling needed
+2️⃣ User Database Service
+Purpose:
+Store users, subscriptions, linked accounts
+Store encrypted API keys / secrets
+Track lot size defaults, trade history, preferences
+Serve dashboard queries quickly
+Key Components:
+Database:
+Use PostgreSQL for relational integrity and migrations
+Optional: SQLite for minimal local setup, but PostgreSQL preferred for multi-user scale
+Python Service:
+Exposes API endpoints to internal Trade Service
+Handles encryption/decryption of API keys
+Example: cryptography library with Fernet (AES-256)
+Schema Example:
+Table
+Fields
+users
+id, email, hashed_password, subscription_plan
+accounts
+id, user_id, exchange_name, api_key_encrypted, api_secret_encrypted, default_lot, trade_type
+positions
+id, user_id, master_trade_id, slave_trade_status, PNL, timestamps
+subscriptions
+user_id, plan, expiry_date
+Security Features:
+API keys never stored in plaintext
+Keys encrypted with user-specific key or server master key
+Secure password hashing with bcrypt / argon2
+3️⃣ Trade Service (CCXT Layer)
+Purpose:
+Listen for new trades from Master accounts (app or external)
+Mirror trades to slave accounts instantly via CCXT
+Handle real-time status: Filled, Partial, Rejected
+Expose internal API for dashboard queries
+Key Components:
+Python CCXT Process:
+Each user trade request is processed in a task queue (can use Python threads or asyncio)
+Reads API keys on-demand from DB service
+Executes trades in parallel across slave accounts
+Communication with User DB Service:
+Requests decrypted keys via secure call
+Updates trade status and PNL back to User DB
+Error Handling / Logging:
+Log all API errors, insufficient funds, rejected trades
+Retry failed trades where appropriate
+Persistent logging for auditing
+4️⃣ Security Considerations
+API & Secret Key Handling:
+Encrypt at rest with AES-256 (via cryptography.Fernet)
+Decrypt only in memory when needed, discard immediately after use
+Limit access to Trade Service only
+Network Security:
+Use local sockets or TLS for inter-process communication
+No API keys exposed to the public network
+User Authentication:
+Hash passwords with argon2/bcrypt
+Optional 2FA on login
+Service Hardening:
+Run Python processes under limited permissions
+Automatic restart via systemd for resilience
+5️⃣ Scalability & Migration
+Two-service separation allows:
+Moving the Trade Service to a more powerful server if needed
+Keeping the User DB intact
+Minimal downtime
+State Management:
+Trade state persisted in DB
+If Trade Service crashes, restart picks up where it left off
+1000+ users:
+Each trade execution can run asynchronously
+Threadpool or asyncio ensures non-blocking execution
+Future: message queue (RabbitMQ/Redis) can manage spikes
+6️⃣ Suggested Python Stack
+Database Layer: SQLAlchemy + PostgreSQL
+Encryption: cryptography.Fernet
+Trade Service: Python + CCXT + asyncio
+Inter-service communication: REST (FastAPI) or TCP + JSON
+Logging: Python logging module, structured logs for auditing
+7️⃣ Fail-Safes & Transparency
+Slave account fails → logged and visible in UI
+Insufficient funds → flagged in Position Detail screen
+API errors → retry queue or alert user
+Always mirror the master trade only once per event, avoid duplicates
+✅ Summary of Backend Concept
+Two separate Python processes: User DB + Trade Service
+Encrypted API keys, never exposed
+Asynchronous parallel trade execution
+Persistent logging and transparent UI feedback
+Scalable to 1000+ users, easy migration
+Minimal infrastructure, Python only, terminal/service-based
+If you want, I can draw a full backend architecture diagram for this two-service setup, showing how the UI, DB service, and CCXT trade service communicate, including encryption and async trade execution flow.
+Do you want me to do that next?
+Perfect, now we’re getting into the backend architecture, and your notes are already pointing toward a scalable, secure, and modular Python-based system. Let’s break this down carefully. I’ll organize it around users, services, security, scaling, and communication.
+1️⃣ Overall Architecture Philosophy
+Goals:
+Support 1000+ users with multiple accounts per user.
+Modular design: User DB layer separated from Trading Service layer (CCXT).
+Easy migration to another server with minimal downtime and zero user loss.
+High security: protect API keys and secrets from hackers.
+Python-only (no Docker) running in terminal or systemd service.
+High-level Concept:
++---------------------+       +----------------------+|  User DB Service    | <---> |  Trade Service (CCXT)||  - Handles users    |       |  - Executes trades   ||  - Handles accounts |       |  - Mirrors trades    ||  - Stores API keys  |       |  - Maintains state   |+---------------------+       +----------------------+          ^                           ^          |                           |   Frontend App UI              Communication API       (Mobile)                   (Internal Protocol)
+Two independent Python processes communicating via:
+TCP sockets, ZeroMQ, or REST API (local server-to-server communication)
+Message queue optional (RabbitMQ or Redis Pub/Sub) if scaling needed
+2️⃣ User Database Service
+Purpose:
+Store users, subscriptions, linked accounts
+Store encrypted API keys / secrets
+Track lot size defaults, trade history, preferences
+Serve dashboard queries quickly
+Key Components:
+Database:
+Use PostgreSQL for relational integrity and migrations
+Optional: SQLite for minimal local setup, but PostgreSQL preferred for multi-user scale
+Python Service:
+Exposes API endpoints to internal Trade Service
+Handles encryption/decryption of API keys
+Example: cryptography library with Fernet (AES-256)
+Schema Example:
+Table
+Fields
+users
+id, email, hashed_password, subscription_plan
+accounts
+id, user_id, exchange_name, api_key_encrypted, api_secret_encrypted, default_lot, trade_type
+positions
+id, user_id, master_trade_id, slave_trade_status, PNL, timestamps
+subscriptions
+user_id, plan, expiry_date
+Security Features:
+API keys never stored in plaintext
+Keys encrypted with user-specific key or server master key
+Secure password hashing with bcrypt / argon2
+3️⃣ Trade Service (CCXT Layer)
+Purpose:
+Listen for new trades from Master accounts (app or external)
+Mirror trades to slave accounts instantly via CCXT
+Handle real-time status: Filled, Partial, Rejected
+Expose internal API for dashboard queries
+Key Components:
+Python CCXT Process:
+Each user trade request is processed in a task queue (can use Python threads or asyncio)
+Reads API keys on-demand from DB service
+Executes trades in parallel across slave accounts
+Communication with User DB Service:
+Requests decrypted keys via secure call
+Updates trade status and PNL back to User DB
+Error Handling / Logging:
+Log all API errors, insufficient funds, rejected trades
+Retry failed trades where appropriate
+Persistent logging for auditing
+4️⃣ Security Considerations
+API & Secret Key Handling:
+Encrypt at rest with AES-256 (via cryptography.Fernet)
+Decrypt only in memory when needed, discard immediately after use
+Limit access to Trade Service only
+Network Security:
+Use local sockets or TLS for inter-process communication
+No API keys exposed to the public network
+User Authentication:
+Hash passwords with argon2/bcrypt
+Optional 2FA on login
+Service Hardening:
+Run Python processes under limited permissions
+Automatic restart via systemd for resilience
+5️⃣ Scalability & Migration
+Two-service separation allows:
+Moving the Trade Service to a more powerful server if needed
+Keeping the User DB intact
+Minimal downtime
+State Management:
+Trade state persisted in DB
+If Trade Service crashes, restart picks up where it left off
+1000+ users:
+Each trade execution can run asynchronously
+Threadpool or asyncio ensures non-blocking execution
+Future: message queue (RabbitMQ/Redis) can manage spikes
+6️⃣ Suggested Python Stack
+Database Layer: SQLAlchemy + PostgreSQL
+Encryption: cryptography.Fernet
+Trade Service: Python + CCXT + asyncio
+Inter-service communication: REST (FastAPI) or TCP + JSON
+Logging: Python logging module, structured logs for auditing
+7️⃣ Fail-Safes & Transparency
+Slave account fails → logged and visible in UI
+Insufficient funds → flagged in Position Detail screen
+API errors → retry queue or alert user
+Always mirror the master trade only once per event, avoid duplicates
+✅ Summary of Backend Concept
+Two separate Python processes: User DB + Trade Service
+Encrypted API keys, never exposed
+Asynchronous parallel trade execution
+Persistent logging and transparent UI feedback
+Scalable to 1000+ users, easy migration
+Minimal infrastructure, Python only, terminal/service-based
+If you want, I can draw a full backend architecture diagram for this two-service setup, showing how the UI, DB service, and CCXT trade service communicate, including encryption and async trade execution flow.
+Do you want me to do that next?
+CRYPTO SYNC — Backend & Trade Mirroring System
+Overview
+Crypto Sync is a mobile-only real-time trade mirroring app that allows users to connect multiple crypto exchange accounts. Trades executed on a Master account are instantly mirrored across Slave accounts, with lot size customization and full failure transparency.
+This write-up focuses on backend architecture, security, logging, and scalability — based on the interactive session.
+1. Backend Architecture
+Two-Service Separation
+We designed the backend with two separate Python services for security, scalability, and clarity:
+A. User DB Service
+Stores:
+Users, Master & Slave accounts
+Subscription plans
+Positions and historical trade execution logs
+API keys encrypted using AES-256 with server master key
+Handles mobile UI requests (login, account management, trades)
+Communicates with Trade Service via ZeroMQ REQ/REP + PUB/SUB
+Maintains logs of critical events only
+B. Trade Service
+Executes trades via CCXT library
+Mirrors Master trades across Slave accounts in real-time
+Applies lot sizes per slave (Fixed or % of balance)
+Handles parallel retries for failed trades (max 3 attempts)
+Returns execution outcomes to DB service
+Logs critical trade attempts, failures, and retries
+Benefits of this separation:
+Clear division of responsibility
+Trade execution is isolated from user data storage
+Easier to migrate services independently if scaling or server change is required
+2. Trade Execution Flow
+Trade Initiation
+User places trade on Master account via mobile UI
+DB Service validates user, subscription, and account limits
+API Key Decryption
+DB Service decrypts Master + Slave keys in memory
+Sends securely to Trade Service via ZeroMQ
+Lot Size Application
+Each Slave account applies Default Lot Size:
+Fixed: e.g., 0.05 BTC
+Percentage: e.g., 15% of balance
+If insufficient funds, marked for retry
+Trade Mirroring
+Trade Service executes trades asynchronously across all slaves
+Each slave’s execution status updated: Filled, Partial Fill, Rejected, API Error
+Failure Handling & Parallel Retry
+Failed trades retried in parallel up to 3 times
+Retry delay configurable (1–2 seconds)
+Final status returned to DB Service
+UI Update & Transparency
+Mobile UI receives real-time updates via PUB/SUB
+Position Detail screen shows per-slave status, lot size, and error reasons
+Logging
+Critical events logged: master trade, slave execution status, retries, errors
+Logs rotated to maintain manageable file sizes
+Historical logs retained 12 months, then purged
+3. Database Schema
+Users Table
+user_id (UUID)
+email
+password_hash
+subscription_plan
+Accounts Table
+account_id (UUID)
+user_id (FK)
+exchange_name
+is_master (boolean)
+api_key_encrypted
+api_secret_encrypted
+default_lot_size
+lot_type (Fixed / Percentage)
+Positions Table
+position_id (UUID)
+user_id
+asset_pair
+trade_type (Spot / Futures)
+master_size
+entry_price
+created_at
+updated_at
+Slave Executions Table
+execution_id (UUID)
+position_id (FK)
+slave_account_id (FK)
+lot_size
+execution_status
+retries_attempted
+error_message
+timestamp
+4. Security Measures
+API Keys: AES-256 encrypted with a server master key
+In-memory decryption only, discarded immediately after use
+ZeroMQ communication ensures fast and secure inter-service communication
+Critical-only logging ensures privacy while maintaining auditability
+5. Logging & Monitoring
+Both DB and Trade Service maintain separate log files
+Log rotation implemented (e.g., 10MB max, 5 files)
+Logs include:
+Master trade submissions
+Slave executions & retries
+Failures & errors
+System events (start, stop, connection errors)
+6. Scalability
+Supports 1000+ users, scalable up to 10,000+ users
+Async + parallel execution ensures fast mirroring even with many slaves
+DB sharding possible in future if needed
+Services are independently deployable, allowing migration without losing users
+7. Trade Mirroring Philosophy
+Automatic mirroring for trades on Master account
+Parallel retries ensure resilience against network or API issues
+Failure transparency: user sees exact reason for rejected/partial trades
+Lot sizing control: users decide risk; app does not calculate risk
+8. Diagram of Connections
+          +-------------------+          |   Mobile App UI   |          |------------------|          | - Place Trade     |          | - View Positions  |          | - Manage Accounts |          +---------+---------+                    |                    | ZeroMQ REQ/REP & PUB/SUB                    v          +-------------------+          |   User DB Service |          |------------------|          | - Users           |          | - Accounts        |          | - Positions       |          | - Slave Executions|          | - Encrypted Keys  |          | - Logging         |          +---------+---------+                    |                    | ZeroMQ REQ/REP & PUB/SUB                    v          +-------------------+          |   Trade Service   |          |------------------|          | - CCXT Execution  |          | - Real-time Mirroring |          | - Parallel Retries|          | - Execution Logs  |          +---------+---------+                    |                    | CCXT API Calls                    v          +-------------------+          |   Exchanges       |          | (Binance, Kraken, |          |  Coinbase, etc.)  |          +-------------------+
+✅ Summary
+Two-service architecture: DB Service + Trade Service
+Encrypted API keys using server master key
+Parallel trade mirroring with retries
+Full historical execution logs with 12-month retention
+ZeroMQ for fast, asynchronous communication
+Critical-only logging for clarity
+Scalable to 10,000+ users
+Transparent UI: user sees real-time status for every slave execution
+This write-up is implementable: a dev team can immediately start building the services, defining ZeroMQ channels, async execution logic, DB schema, and integrate it with the mobile UI.
+If you want, the next step could be me creating a Python module skeleton for both services, showing classes, async functions, and ZeroMQ communication stubs, so you could hand it to developers and start coding right away.
+Do you want me to do that next?

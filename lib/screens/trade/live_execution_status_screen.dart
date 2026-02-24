@@ -3,53 +3,43 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/common_widgets.dart';
-import '../../data/mock_data.dart';
+// Redundant mock_data import removed
+import 'package:provider/provider.dart';
+import '../../providers/sync_provider.dart';
+import 'dart:math';
 
-class LiveExecutionStatusScreen extends StatefulWidget {
-  const LiveExecutionStatusScreen({super.key});
-
-  @override
-  State<LiveExecutionStatusScreen> createState() => _LiveExecutionStatusScreenState();
-}
-
-class _LiveExecutionStatusScreenState extends State<LiveExecutionStatusScreen> {
-  bool _isFinished = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _startExecutionSimulation();
-  }
-
-  void _startExecutionSimulation() async {
-    await Future.delayed(const Duration(seconds: 4));
-    if (mounted) {
-      setState(() => _isFinished = true);
-    }
-  }
+class LiveExecutionStatusScreen extends StatelessWidget {
+  final String positionId;
+  const LiveExecutionStatusScreen({super.key, required this.positionId});
 
   @override
   Widget build(BuildContext context) {
+    final syncProvider = context.watch<SyncProvider>();
+    final position = syncProvider.currentPositions[positionId];
+    
+    // If position is missing (maybe finished or cleanup), use mock or neutral state
+    final isFinished = position == null || _checkIfFinished(position);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Live Execution'),
-        automaticallyImplyLeading: _isFinished,
+        title: const Text('Live Mirroring'),
+        automaticallyImplyLeading: isFinished,
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            _buildMasterStatus(),
+            _buildMasterStatus(position, isFinished),
             const SizedBox(height: 40),
-            const SectionHeader(title: 'Slave Sync Status'),
+            const SectionHeader(title: 'Slave Mirroring Progress'),
             const SizedBox(height: 16),
-            Expanded(child: _buildSlaveStatuses()),
-            if (_isFinished)
+            Expanded(child: _buildSlaveStatuses(position)),
+            if (isFinished)
               Padding(
                 padding: const EdgeInsets.only(top: 24),
-                child: ElevatedButton(
+                child: GradientButton(
+                  label: 'Return to Dashboard',
                   onPressed: () => context.go('/'),
-                  child: const Text('Return to Dashboard'),
                 ),
               ).animate().fadeIn().slideY(begin: 0.2, end: 0),
           ],
@@ -58,7 +48,16 @@ class _LiveExecutionStatusScreenState extends State<LiveExecutionStatusScreen> {
     );
   }
 
-  Widget _buildMasterStatus() {
+  bool _checkIfFinished(Map<String, dynamic> pos) {
+    final slaves = pos['slaves'] as Map<String, dynamic>? ?? {};
+    if (slaves.isEmpty) return false;
+    return slaves.values.every((s) => s['status'] == 'filled' || s['status'] == 'failed');
+  }
+
+  Widget _buildMasterStatus(Map<String, dynamic>? position, bool isFinished) {
+    final symbol = position?['symbol'] ?? 'Unknown';
+    final side = (position?['side'] as String?)?.toUpperCase() ?? 'TRADE';
+    
     return AppCard(
       padding: const EdgeInsets.all(24),
       color: AppColors.surface,
@@ -72,15 +71,15 @@ class _LiveExecutionStatusScreenState extends State<LiveExecutionStatusScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Master Account (Binance)', style: TextStyle(fontWeight: FontWeight.w600)),
-                    Text(_isFinished ? 'Execution Complete' : 'Executing Trade...', 
-                        style: TextStyle(color: _isFinished ? AppColors.success : AppColors.primary, fontSize: 12)),
+                    Text('Master $side: $symbol', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                    Text(isFinished ? 'Execution Sequence Complete' : 'Synchronizing Mirroring...', 
+                        style: TextStyle(color: isFinished ? AppColors.success : AppColors.primary, fontSize: 12)),
                   ],
                 ),
               ),
-              if (!_isFinished)
+              if (!isFinished)
                 const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-              if (_isFinished)
+              if (isFinished)
                 const Icon(Icons.check_circle, color: AppColors.success),
             ],
           ),
@@ -89,14 +88,27 @@ class _LiveExecutionStatusScreenState extends State<LiveExecutionStatusScreen> {
     );
   }
 
-  Widget _buildSlaveStatuses() {
+  Widget _buildSlaveStatuses(Map<String, dynamic>? position) {
+    if (position == null) {
+      return const Center(child: Text('Initializing mirroring...'));
+    }
+
+    final slaves = position['slaves'] as Map<String, dynamic>? ?? {};
+    final slaveIds = slaves.keys.toList();
+
+    if (slaveIds.isEmpty) {
+      return const Center(child: Text('No slave accounts found for mirroring.'));
+    }
+
     return ListView.builder(
-      itemCount: MockData.slaveAccounts.length,
+      itemCount: slaveIds.length,
       itemBuilder: (context, index) {
-        final slave = MockData.slaveAccounts[index];
-        // Simulate some variety in status
-        bool isDone = _isFinished || index < 2; 
-        bool isError = index == 3 && _isFinished;
+        final slaveId = slaveIds[index];
+        final slaveData = slaves[slaveId];
+        final status = slaveData['status'] ?? 'pending';
+        final isDone = status == 'filled';
+        final isError = status == 'failed';
+        final isRetrying = status == 'retrying';
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
@@ -104,29 +116,38 @@ class _LiveExecutionStatusScreenState extends State<LiveExecutionStatusScreen> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                ExchangeAvatar(exchangeName: slave.exchangeName, logo: slave.exchangeLogo, size: 32),
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: AppColors.primary.withOpacity(0.1),
+                  child: Text(slaveId.substring(0, min(slaveId.length, 1)).toUpperCase(), 
+                    style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(slave.exchangeName, style: const TextStyle(fontWeight: FontWeight.w500)),
-                      Text(isError ? 'API Error: Timeout' : (isDone ? 'Filled' : 'Pending...'), 
-                          style: TextStyle(fontSize: 10, color: isError ? AppColors.danger : (isDone ? AppColors.success : AppColors.textMuted))),
+                      Text('Slave Account: $slaveId', style: const TextStyle(fontWeight: FontWeight.w500)),
+                      Text(isError ? 'Error: Execution Failed' : (isDone ? 'Filled' : (isRetrying ? 'Retrying (Attempt ${slaveData['retries'] ?? 1})...' : 'Pending...')), 
+                          style: TextStyle(fontSize: 10, color: isError ? AppColors.danger : (isDone ? AppColors.success : (isRetrying ? AppColors.warning : AppColors.textMuted)))),
                     ],
                   ),
                 ),
-                if (!isDone && !isError)
+                if (!isDone && !isError && !isRetrying)
                   const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 1.5)),
-                if (isDone && !isError)
+                if (isRetrying)
+                   const Icon(Icons.sync_problem, color: AppColors.warning, size: 18).animate(onPlay: (c) => c.repeat()).rotate(),
+                if (isDone)
                   const Icon(Icons.check_circle_outline, color: AppColors.success, size: 18),
                 if (isError)
                   const Icon(Icons.error_outline, color: AppColors.danger, size: 18),
               ],
             ),
           ),
-        ).animate().fadeIn(delay: (index * 150).ms);
+        ).animate().fadeIn(delay: (index * 100).ms);
       },
     );
   }
 }
+
+int min(int a, int b) => a < b ? a : b;

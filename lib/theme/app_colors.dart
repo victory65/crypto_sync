@@ -32,13 +32,23 @@ class AppColors {
   // Sync status
   static const Color syncActive = Color(0xFF10B981);
   static const Color syncDelayed = Color(0xFFF59E0B);
-  static const Color syncPaused = Color(0xFFEF4444);
+  static const Color syncPaused = Color(0xFF6B7280);
 
   // Chart
   static const Color chartLine = Color(0xFF3B82F6);
   static const Color chartFill = Color(0x263B82F6);
   static const Color chartGreen = Color(0xFF10B981);
   static const Color chartRed = Color(0xFFEF4444);
+
+  // Light Mode Palette (Premium Milky Green)
+  static const Color lightBackground = Color(0xFFF5F7F2); // Soft Milky with hint of Sage
+  static const Color lightSurface = Colors.white;
+  static const Color lightCard = Colors.white;
+  static const Color lightTextPrimary = Color(0xFF1A1C18); // Charcoal with green undertone
+  static const Color lightTextSecondary = Color(0xFF43493E); // Muted Olive Slate
+  static const Color lightTextMuted = Color(0xFF74796D); // Muted Sage
+  static const Color lightDivider = Color(0xFFE1E4DC); // Soft Greenish Divider
+  static const Color lightBorder = Color(0xFFDDE1D7); // Subtle Greenish Border
 
   // Gradients
   static const LinearGradient backgroundGradient = LinearGradient(

@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+cryptography
+python-jose[cryptography]
+passlib[bcrypt]
+ccxt
+protobuf>=5.29.3

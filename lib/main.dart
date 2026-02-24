@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'providers/sync_provider.dart';
+import 'providers/settings_provider.dart';
+import 'providers/subscription_provider.dart';
+import 'services/connectivity_service.dart';
+import 'widgets/offline_overlay.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'theme/app_theme.dart';
 import 'theme/app_colors.dart';
 import 'screens/auth/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/signup_screen.dart';
+import 'screens/auth/forgot_password_screen.dart';
 import 'widgets/sync_status_pill.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/positions/positions_list_screen.dart';
@@ -16,10 +24,26 @@ import 'screens/trade/manual_trade_setup_screen.dart';
 import 'screens/trade/trade_preview_sync_screen.dart';
 import 'screens/trade/live_execution_status_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/settings/security_screen.dart';
+import 'screens/bots/bot_nexus_screen.dart';
 import 'screens/subscription_screen.dart';
 
-void main() {
-  runApp(const CryptoSyncApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
+  await Hive.openBox('protocol_logs');
+  
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => SyncProvider()),
+        ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ChangeNotifierProvider(create: (_) => SubscriptionProvider()),
+        ChangeNotifierProvider(create: (_) => ConnectivityService()),
+      ],
+      child: const CryptoSyncApp(),
+    ),
+  );
 }
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -74,6 +98,16 @@ final _router = GoRouter(
         GoRoute(
           path: '/settings',
           builder: (context, state) => const SettingsScreen(),
+          routes: [
+            GoRoute(
+              path: 'security',
+              builder: (context, state) => const SecurityScreen(),
+            ),
+          ],
+        ),
+        GoRoute(
+          path: '/p2p',
+          builder: (context, state) => const BotNexusScreen(),
         ),
       ],
     ),
@@ -87,7 +121,7 @@ final _router = GoRouter(
     ),
     GoRoute(
       path: '/trade/execution',
-      builder: (context, state) => const LiveExecutionStatusScreen(),
+      builder: (context, state) => LiveExecutionStatusScreen(positionId: state.extra as String),
     ),
     GoRoute(
       path: '/subscription',
@@ -101,6 +135,10 @@ final _router = GoRouter(
       path: '/signup',
       builder: (context, state) => const SignupScreen(),
     ),
+    GoRoute(
+      path: '/forgot-password',
+      builder: (context, state) => const ForgotPasswordScreen(),
+    ),
   ],
 );
 
@@ -109,11 +147,18 @@ class CryptoSyncApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+    
     return MaterialApp.router(
       title: 'Crypto Sync',
-      theme: AppTheme.darkTheme,
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: settings.themeMode,
       routerConfig: _router,
       debugShowCheckedModeBanner: false,
+      builder: (context, child) {
+        return OfflineOverlay(child: child!);
+      },
     );
   }
 }
@@ -196,7 +241,7 @@ class PlaceholderScreen extends StatelessWidget {
         actions: const [
           Padding(
             padding: EdgeInsets.only(right: 16.0),
-            child: SyncStatusPill(status: 'Active'),
+            child: SyncStatusPill(),
           ),
         ],
       ),
