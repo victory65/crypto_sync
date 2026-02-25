@@ -18,7 +18,7 @@ The backend is built with **FastAPI** for high performance and **WebSockets** fo
 
 To ensure production stability, the frontend uses a dedicated model layer.
 *   `lib/models/trade_models.dart`: Contains `Position`, `TradeSide`, `OrderType`, and `ExecutionStatus`.
-*   `lib/models/account_models.dart`: Contains `SlaveAccount`, `MasterAccount`, and `AccountSyncStatus`.
+*   `lib/models/account_models.dart`: Contains `InvestorAccount`, `MasterAccount`, and `AccountSyncStatus`.
 *   `lib/widgets/common_widgets.dart`: Contains the `StatusBadge` which now supports `textColor` and `icon` for premium branding.
 
 ---
@@ -79,9 +79,9 @@ If you look at `backend/core/security.py`, you'll see `decrypt_api_key()`. This 
 ### 4. Managing Subscriptions & Tiers
 Subscription tiers and limits are enforced in `backend/main.py`.
 *   **Plan Definitions**:
-    *   `free`: 1 Master, 1 Slave, 7-day trial.
-    *   `basic`: 1 Master, 5 Slaves (**$19/mo**).
-    *   `pro`: 1 Master, 10 Slaves (scaled pricing).
+    *   `free`: 1 Master, 1 Investor, 7-day trial.
+    *   `basic`: 1 Master, 5 Investors (**$19/mo**).
+    *   `pro`: 1 Master, 10 Investors (scaled pricing).
 *   **To Override a User's Plan**: Locate the `subscription` object in `USERS_DB` and change `"plan": "free"` to `"plan": "pro"`.
 *   **To Test Expiry**: Locate the `expiry` field (epoch timestamp) and set it to a past date.
 *   **Session Isolation**: To protect user privacy, the `SyncProvider` explicitly calls `clearLogs()` during both the `connect()` (login/signup) and `disconnect()` flows. This wipes all local **Hive** records and transient state, ensuring that a shared device never leaks trade data between different user accounts.
@@ -89,9 +89,9 @@ Subscription tiers and limits are enforced in `backend/main.py`.
 ### 🔘 Professional Account Controls
 The Accounts system is now more robust:
 *   **Editable Master**: In `accounts_overview_screen.dart`, the Master account card features a settings icon that allows users to re-invoke the `AddAccountScreen` in "edit mode" to update API keys and secrets.
-*   **Lot Sizing Logic**: Slaves now support two mirroring modes:
+*   **Lot Sizing Logic**: Investors now support two mirroring modes:
     - **Fixed**: A constant value stored in the `lot_size` field.
-    - **Percentage**: Calculates the order size as a percentage of the slave's live balance in `trade_engine.py`.
+    - **Percentage**: Calculates the order size as a percentage of the investor's live balance in `trade_engine.py`.
 *   **Membership UI**: The Dashboard's portfolio card calls `_buildAnimatedPulseStatus`, which now evaluates the `SubscriptionProvider` state to display **"ACTIVATED: PRO"** or other relevant tier labels.
 
 ---
@@ -134,3 +134,4 @@ You can run automated checks on your security logic:
 2.  Run `pytest` in the root directory to verify that encryption and authentication are working as expected.
 
 **Happy Building, Creator!** 🚀✌️
+

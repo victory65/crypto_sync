@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../theme/app_colors.dart';
-import '../../widgets/common_widgets.dart';
+import 'package:crypto_sync/theme/app_colors.dart';
+import 'package:crypto_sync/widgets/common_widgets.dart';
 // Redundant mock_data import removed
 import 'package:provider/provider.dart';
-import '../../providers/sync_provider.dart';
+import 'package:crypto_sync/providers/sync_provider.dart';
 import 'dart:math';
 
 class LiveExecutionStatusScreen extends StatelessWidget {
@@ -31,9 +31,9 @@ class LiveExecutionStatusScreen extends StatelessWidget {
           children: [
             _buildMasterStatus(position, isFinished),
             const SizedBox(height: 40),
-            const SectionHeader(title: 'Slave Mirroring Progress'),
+            const SectionHeader(title: 'Investor Mirroring Progress'),
             const SizedBox(height: 16),
-            Expanded(child: _buildSlaveStatuses(position)),
+            Expanded(child: _buildInvestorStatuses(position)),
             if (isFinished)
               Padding(
                 padding: const EdgeInsets.only(top: 24),
@@ -49,9 +49,9 @@ class LiveExecutionStatusScreen extends StatelessWidget {
   }
 
   bool _checkIfFinished(Map<String, dynamic> pos) {
-    final slaves = pos['slaves'] as Map<String, dynamic>? ?? {};
-    if (slaves.isEmpty) return false;
-    return slaves.values.every((s) => s['status'] == 'filled' || s['status'] == 'failed');
+    final investors = pos['investors'] as Map<String, dynamic>? ?? {};
+    if (investors.isEmpty) return false;
+    return investors.values.every((s) => s['status'] == 'filled' || s['status'] == 'failed');
   }
 
   Widget _buildMasterStatus(Map<String, dynamic>? position, bool isFinished) {
@@ -88,24 +88,24 @@ class LiveExecutionStatusScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSlaveStatuses(Map<String, dynamic>? position) {
+  Widget _buildInvestorStatuses(Map<String, dynamic>? position) {
     if (position == null) {
       return const Center(child: Text('Initializing mirroring...'));
     }
 
-    final slaves = position['slaves'] as Map<String, dynamic>? ?? {};
-    final slaveIds = slaves.keys.toList();
+    final investors = position['investors'] as Map<String, dynamic>? ?? {};
+    final investorIds = investors.keys.toList();
 
-    if (slaveIds.isEmpty) {
-      return const Center(child: Text('No slave accounts found for mirroring.'));
+    if (investorIds.isEmpty) {
+      return const Center(child: Text('No investor accounts found for mirroring.'));
     }
 
     return ListView.builder(
-      itemCount: slaveIds.length,
+      itemCount: investorIds.length,
       itemBuilder: (context, index) {
-        final slaveId = slaveIds[index];
-        final slaveData = slaves[slaveId];
-        final status = slaveData['status'] ?? 'pending';
+        final investorId = investorIds[index];
+        final investorData = investors[investorId];
+        final status = investorData['status'] ?? 'pending';
         final isDone = status == 'filled';
         final isError = status == 'failed';
         final isRetrying = status == 'retrying';
@@ -119,7 +119,7 @@ class LiveExecutionStatusScreen extends StatelessWidget {
                 CircleAvatar(
                   radius: 16,
                   backgroundColor: AppColors.primary.withOpacity(0.1),
-                  child: Text(slaveId.substring(0, min(slaveId.length, 1)).toUpperCase(), 
+                  child: Text(investorId.substring(0, min(investorId.length, 1)).toUpperCase(), 
                     style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(width: 16),
@@ -127,8 +127,8 @@ class LiveExecutionStatusScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Slave Account: $slaveId', style: const TextStyle(fontWeight: FontWeight.w500)),
-                      Text(isError ? 'Error: Execution Failed' : (isDone ? 'Filled' : (isRetrying ? 'Retrying (Attempt ${slaveData['retries'] ?? 1})...' : 'Pending...')), 
+                      Text('Investor Account: $investorId', style: const TextStyle(fontWeight: FontWeight.w500)),
+                      Text(isError ? 'Error: Execution Failed' : (isDone ? 'Filled' : (isRetrying ? 'Retrying (Attempt ${investorData['retries'] ?? 1})...' : 'Pending...')), 
                           style: TextStyle(fontSize: 10, color: isError ? AppColors.danger : (isDone ? AppColors.success : (isRetrying ? AppColors.warning : AppColors.textMuted)))),
                     ],
                   ),
@@ -151,3 +151,5 @@ class LiveExecutionStatusScreen extends StatelessWidget {
 }
 
 int min(int a, int b) => a < b ? a : b;
+
+

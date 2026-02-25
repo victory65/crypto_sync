@@ -18,8 +18,8 @@ pluginManagement {
 
 plugins {
     id "dev.flutter.flutter-plugin-loader" version "1.0.0"
-    // Updated AGP to 8.3.2 to support Java 17 and Android 16
-    id "com.android.application" version "8.3.2" apply false
+    // Updated AGP to 8.9.1 to satisfy dependency requirements
+    id "com.android.application" version "8.9.1" apply false
     // Updated Kotlin to 1.9.24 for compatibility with AGP 8.3+
     id "org.jetbrains.kotlin.android" version "1.9.24" apply false
 }

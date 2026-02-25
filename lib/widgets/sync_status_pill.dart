@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/sync_provider.dart';
-import '../providers/subscription_provider.dart';
-import '../theme/app_colors.dart';
+import 'package:crypto_sync/providers/sync_provider.dart';
+import 'package:crypto_sync/providers/subscription_provider.dart';
+import 'package:crypto_sync/theme/app_colors.dart';
 
 class SyncStatusPill extends StatelessWidget {
   const SyncStatusPill({super.key});
@@ -92,3 +92,4 @@ class SyncStatusPill extends StatelessWidget {
     );
   }
 }
+

@@ -23,55 +23,78 @@ class TradeEngine:
     async def fetch_balance(self, exchange_id: str, api_key: str, api_secret: str) -> float:
         """
         Fetches the actual balance from the exchange using CCXT.
-        In this mock/demo, we return a random realistic balance.
         """
+        exchange = None
         try:
-            # In production, we would use ccxt:
-            # exchange_class = getattr(ccxt, exchange_id)
-            # exchange = exchange_class({'apiKey': api_key, 'secret': api_secret})
-            # balance = await exchange.fetch_balance()
-            # return balance['total']['USDT']
+            if not exchange_id or exchange_id == "mock":
+                return 0.0
+                
+            exchange_class = getattr(ccxt, exchange_id)
+            exchange = exchange_class({
+                'apiKey': api_key,
+                'secret': api_secret,
+                'enableRateLimit': True,
+            })
             
-            await asyncio.sleep(0.5) # Simulate network delay
-            import random
-            return round(random.uniform(100.0, 15000.0), 2)
+            balance = await exchange.fetch_balance()
+            # We prioritize USDT for the sync dashboard
+            return float(balance.get('total', {}).get('USDT', 0.0))
         except Exception as e:
-            system_logger.error(f"Error fetching balance for {exchange_id}: {e}")
+            system_logger.error(f"Error fetching real balance for {exchange_id}: {e}")
             return 0.0
+        finally:
+            if exchange:
+                await exchange.close()
 
-    async def mirror_trade(self, master_trade: Dict[str, Any], slave_accounts: List[Dict[str, Any]]):
+    async def mirror_trade(self, master_trade: Dict[str, Any], investor_accounts: List[Dict[str, Any]]):
         """
-        Mirrors a trade from master to multiple slaves in parallel.
+        Mirrors a trade from master to multiple investors in parallel.
         """
         trades_logger.info(f"New Master Trade Detected: {master_trade}")
         
         # Emit initial position update
         position_id = master_trade.get('id', 'PX-' + str(int(asyncio.get_event_loop().time())))
+        trade_type = master_trade.get('trade_type', 'spot')
+        
         await broadcast_event("position_update", {
             "position_id": position_id,
             "master_status": "detected",
             "symbol": master_trade.get('symbol'),
             "side": master_trade.get('side'),
-            "slave_updates": []
+            "trade_type": trade_type,
+            "investor_updates": []
         })
 
-        tasks = [self.execute_slave_trade(position_id, master_trade, slave) for slave in slave_accounts]
+        tasks = [self.execute_investor_trade(position_id, master_trade, investor) for investor in investor_accounts]
         results = await asyncio.gather(*tasks)
         
         trades_logger.info(f"Mirroring completed for position {position_id}. Results: {results}")
 
-    async def execute_slave_trade(self, position_id: str, master_trade: Dict[str, Any], slave: Dict[str, Any]):
+    async def execute_investor_trade(self, position_id: str, master_trade: Dict[str, Any], investor: Dict[str, Any]):
         """
-        Executes a single trade on a slave account with retry logic.
+        Executes a single trade on a investor account with retry logic.
         """
-        account_id = slave.get('id')
+        account_id = investor.get('id')
         symbol = master_trade.get('symbol')
         side = master_trade.get('side')
+        trade_type = master_trade.get('trade_type', 'spot')
+        investor_trade_type = investor.get('trade_type', 'spot')
         
-        # Calculate lot size based on slave settings (Fixed or Percentage)
-        lot_size_val = slave.get('lot_size', 0.01)
-        mode = slave.get('lot_size_mode', 'fixed')
-        balance = slave.get('balance', 0.0)
+        # Trade Type Filtering
+        if investor_trade_type != 'both' and investor_trade_type != trade_type:
+            trades_logger.info(f"Skipping account {account_id}: Investor type {investor_trade_type} does not match trade type {trade_type}")
+            await broadcast_event("investor_execution_update", {
+                "position_id": position_id,
+                "account_id": account_id,
+                "status": "ignored",
+                "reason": f"Mismatched type ({investor_trade_type} vs {trade_type})"
+            })
+            return {"status": "ignored", "reason": "Mismatched trade type"}
+
+        # Calculate lot size based on investor settings (Fixed or Percentage)
+        lot_size_val = investor.get('lot_size', 0.01)
+        mode = investor.get('lot_size_mode', 'fixed')
+        balance = investor.get('balance', 0.0)
         
         if mode == 'percentage':
             # lot_size_val is a percentage (e.g. 10 for 10%)
@@ -94,7 +117,7 @@ class TradeEngine:
                     })
 
                 # In production, we fetch encrypted keys from DB and decrypt them here
-                # encrypted_api_key = slave.get('encrypted_api_key')
+                # encrypted_api_key = investor.get('encrypted_api_key')
                 # api_key = decrypt_api_key(encrypted_api_key)
                 
                 # Simulate the use of the decrypted key
@@ -103,12 +126,12 @@ class TradeEngine:
                 # Simulate API call to exchange
                 await asyncio.sleep(0.5) # Simulate network latency
                 
-                if attempt < 2 and account_id == "slave_fail_demo": # Simulation of failure
+                if attempt < 2 and account_id == "investor_fail_demo": # Simulation of failure
                     raise Exception("Mock Exchange API Error")
 
                 # Success
                 result = {"status": "filled", "order_id": f"ord-{secrets.token_hex(4)}"}
-                await broadcast_event("slave_execution_update", {
+                await broadcast_event("investor_execution_update", {
                     "position_id": position_id,
                     "account_id": account_id,
                     "status": "filled",
@@ -120,7 +143,7 @@ class TradeEngine:
             except Exception as e:
                 trades_logger.error(f"Error on account {account_id}, attempt {attempt}: {e}")
                 if attempt == self.retry_limit:
-                    await broadcast_event("slave_execution_update", {
+                    await broadcast_event("investor_execution_update", {
                         "position_id": position_id,
                         "account_id": account_id,
                         "status": "failed",
@@ -133,3 +156,4 @@ class TradeEngine:
 
 import secrets
 engine = TradeEngine()
+

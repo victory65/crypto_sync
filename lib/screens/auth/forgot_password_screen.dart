@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
-import '../../theme/app_colors.dart';
-import '../../widgets/common_widgets.dart';
-import '../../core/api_config.dart';
+import 'package:crypto_sync/theme/app_colors.dart';
+import 'package:crypto_sync/widgets/common_widgets.dart';
+import 'package:crypto_sync/core/api_config.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -154,3 +154,4 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 }
+

@@ -20,7 +20,7 @@ class MasterAccount {
   });
 }
 
-class SlaveAccount {
+class InvestorAccount {
   final String id;
   final String exchangeName;
   final String exchangeLogo;
@@ -32,7 +32,7 @@ class SlaveAccount {
   final AccountSyncStatus syncStatus;
   final String? attentionReason;
 
-  const SlaveAccount({
+  const InvestorAccount({
     required this.id,
     required this.exchangeName,
     required this.exchangeLogo,
@@ -45,13 +45,13 @@ class SlaveAccount {
     this.attentionReason,
   });
 
-  SlaveAccount copyWith({
+  InvestorAccount copyWith({
     bool? syncEnabled,
     double? defaultLotSize,
     LotSizeMode? lotSizeMode,
     AccountSyncStatus? syncStatus,
   }) {
-    return SlaveAccount(
+    return InvestorAccount(
       id: id,
       exchangeName: exchangeName,
       exchangeLogo: exchangeLogo,
@@ -65,3 +65,4 @@ class SlaveAccount {
     );
   }
 }
+

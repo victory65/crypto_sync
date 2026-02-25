@@ -6,15 +6,14 @@ Crypto Sync is a production-grade trade mirroring system that allows users to sy
 
 ## ✨ Core Features
 
-*   🌍 **Real-Time Synchronization**: Instant state propagation via WebSockets with automatic exponential backoff.
-*   👑 **Professional Account Management**: Editable Master account credentials and mandatory slave lot sizing with **Fixed** vs **Percentage** modes.
-*   🔐 **Advanced Security**: AES-256 JIT encryption for API keys and mandatory hardware-backed Biometric locking.
-*   📈 **Membership Awareness**: Real-time display of active subscription tier (ACTIVATED: PRO) on the Dashboard.
-*   👤 **Dynamic User Profiles**: Real-time identification and display of user name and email across all screens.
-*   🛡️ **Security Center**: Specialized module for 2FA management, session protection, and **Session Isolation** (auto-clearing logs on logout/login).
-*   🚀 **Bot Nexus (Coming Soon)**: A premium hub for deploying and managing exclusive algorithmic trading bots.
-*   ⚙️ **Intelligent Trade Engine**: Concurrent multi-account execution with support for percentage-based sizing.
-*   🚫 **Offline Protection**: Automatic app-wide disablement with a premium overlay when internet connection is lost.
+*   🌍 **Real-Time Synchronization**: Instant state propagation via WebSockets with **Instant Reconnection** logic.
+*   👑 **Professional Account Management**: Support for **Spot, Futures, and Both** execution modes with mandatory investor lot sizing.
+*   🔐 **Advanced Security**: AES-256 JIT encryption for API keys and **Full 2FA Implementation** (TOTP/OTP).
+*   📈 **Membership Awareness**: Real-time display of active subscription tier with enforceable limits on investor accounts.
+*   👤 **Dynamic User Profiles**: Real-time identification, profile picture persistence, and cloud sync across logins.
+*   🛡️ **Security Center**: Specialized module for 2FA management, login history, and **Session Isolation**.
+*   ⚙️ **Intelligent Trade Engine**: Concurrent multi-account execution with optimized SQLite **WAL Mode** for zero-latency database writes.
+*   🚫 **Offline Protection**: Automatic app-wide disablement with instant recovery when network connectivity is restored.
 
 ## 📚 Project Documentation
 
@@ -51,12 +50,13 @@ To connect your app from outside your home network:
 ---
 
 ## 📈 Project Status: **v1.0 Release-Ready**
-- [x] **Auth**: Real JWT Login/Register with Admin Detection.
-- [x] **Profiles**: Dynamic user data persistence and real-time syncing.
+- [x] **Auth & 2FA**: Real JWT Login/Register with full TOTP 2FA flow.
+- [x] **Profiles**: Dynamic user data and profile picture persistence.
 - [x] **Bot Nexus**: Premium "Coming Soon" interface with futuristic design.
-- [x] **Security**: AES-256 JIT Encryption + Session Log Isolation.
-- [x] **Mirroring**: WebSocket-based trade detection and execution logs.
-- [x] **Admin Suite**: Hidden testing tools for tier management and expiry simulation.
+- [x] **Security**: AES-256 JIT Encryption + session management + login logs.
+- [x] **Mirroring**: WebSocket-based trade detection with support for Spot/Futures/Both modes.
+- [x] **Stability**: Connectivity monitoring and SQLite WAL optimization.
 
 ---
 *Built with ❤️ for professional traders.*
+

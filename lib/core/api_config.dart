@@ -16,7 +16,7 @@ class ApiConfig {
 
   // Production Settings (Replace prodHost with your Public IP or Tunnel URL)
   // For example: "8.tcp.ngrok.io" or "your-app.herokuapp.com"
-  static const String prodHost = "operated-adrian-drawings-mail.trycloudflare.com"; 
+  static const String prodHost = "agreements-course-mumbai-harvey.trycloudflare.com"; 
   static const String prodPort = "443"; // Standard HTTPS port
   static const String prodProtocol = "https"; 
   static const String prodWsProtocol = "wss"; 

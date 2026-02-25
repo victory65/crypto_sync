@@ -2,21 +2,72 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../../theme/app_colors.dart';
-import '../../widgets/common_widgets.dart';
-import '../../providers/sync_provider.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:crypto_sync/theme/app_colors.dart';
+import 'package:crypto_sync/widgets/common_widgets.dart';
+import 'package:crypto_sync/providers/sync_provider.dart';
+import 'package:crypto_sync/core/api_config.dart';
 
-class BotNexusScreen extends StatelessWidget {
+class BotNexusScreen extends StatefulWidget {
   const BotNexusScreen({super.key});
+
+  @override
+  State<BotNexusScreen> createState() => _BotNexusScreenState();
+}
+
+class _BotNexusScreenState extends State<BotNexusScreen> {
+  bool _isSubmitting = false;
+
+  Future<void> _handleNotifyMe() async {
+    final syncProvider = context.read<SyncProvider>();
+    final email = syncProvider.userEmail;
+
+    if (email == null || email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to join the waitlist')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/bot/notify'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email}),
+      );
+
+      if (response.statusCode == 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('You\'re on the list! We\'ll notify you soon.'), backgroundColor: AppColors.success),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.danger),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('BOT NEXUS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.pop(),
+        ),
       ),
       body: Stack(
         children: [
@@ -71,10 +122,8 @@ class BotNexusScreen extends StatelessWidget {
                     ).animate().fadeIn(delay: 400.ms, duration: 800.ms),
                     const SizedBox(height: 48),
                     GradientButton(
-                      label: 'Notify Me',
-                      onPressed: () {
-                        // Logic to join waitlist/notification
-                      },
+                      label: _isSubmitting ? 'JOINING...' : 'Notify Me',
+                      onPressed: _isSubmitting ? null : _handleNotifyMe,
                     ).animate().fadeIn(delay: 800.ms),
                   ],
                 ),
@@ -162,3 +211,4 @@ class _GridPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
+

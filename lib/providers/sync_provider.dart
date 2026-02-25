@@ -1,14 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
 import 'package:http/http.dart' as http;
 import 'package:hive/hive.dart';
-import 'subscription_provider.dart';
+import 'package:crypto_sync/providers/subscription_provider.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
-import '../core/api_config.dart';
+import 'package:crypto_sync/core/api_config.dart';
 
 enum SyncStatus { connected, disconnected, connecting, error }
 
@@ -30,6 +31,8 @@ class SyncProvider with ChangeNotifier {
   bool _isFetchingAccounts = false;
   String? _userName;
   String? _userEmail;
+  String? _userPhone;
+  String? _userProfilePic;
 
   SyncStatus get status => _status;
   bool get isOnline => _status == SyncStatus.connected;
@@ -46,6 +49,8 @@ class SyncProvider with ChangeNotifier {
   String? get lastUserId => _lastUserId;
   String? get userName => _userName;
   String? get userEmail => _userEmail;
+  String? get userPhone => _userPhone;
+  String? get userProfilePic => _userProfilePic;
 
   // Configuration
   final String _baseUrl = ApiConfig.wsUrl; 
@@ -56,11 +61,15 @@ class SyncProvider with ChangeNotifier {
   Timer? _heartbeatTimer;
   bool _isDisposed = false;
   bool _isConnecting = false;
+  StreamSubscription? _connectivitySubscription;
+  Timer? _healthCheckTimer;
 
   static const String _userIdKey = 'auth_user_id';
   static const String _tokenKey = 'auth_token';
   static const String _userNameKey = 'auth_user_name';
   static const String _userEmailKey = 'auth_user_email';
+  static const String _userPhoneKey = 'auth_user_phone';
+  static const String _userProfilePicKey = 'auth_user_profile_pic';
   static const String _isAdminKey = 'auth_is_admin';
 
   SubscriptionProvider? get subProvider => _subProvider;
@@ -69,11 +78,13 @@ class SyncProvider with ChangeNotifier {
     _subProvider = provider;
   }
 
-  Future<void> connect(String userId, String token, {SubscriptionProvider? subProvider, String? userName, String? userEmail, bool? isAdmin}) async {
+  Future<void> connect(String userId, String token, {SubscriptionProvider? subProvider, String? userName, String? userEmail, String? userPhone, String? userProfilePic, bool? isAdmin}) async {
     _lastUserId = userId;
     _lastToken = token;
     _userName = userName;
     _userEmail = userEmail;
+    _userPhone = userPhone;
+    _userProfilePic = userProfilePic;
     if (subProvider != null) _subProvider = subProvider;
     _isManuallyDisconnected = false;
     _reconnectAttempts = 0;
@@ -84,6 +95,8 @@ class SyncProvider with ChangeNotifier {
     await prefs.setString(_tokenKey, token);
     if (userName != null) await prefs.setString(_userNameKey, userName);
     if (userEmail != null) await prefs.setString(_userEmailKey, userEmail);
+    if (userPhone != null) await prefs.setString(_userPhoneKey, userPhone);
+    if (userProfilePic != null) await prefs.setString(_userProfilePicKey, userProfilePic);
     if (isAdmin != null) {
       await prefs.setBool(_isAdminKey, isAdmin);
       _subProvider?.setIsAdmin(isAdmin);
@@ -94,6 +107,8 @@ class SyncProvider with ChangeNotifier {
     // Clear old logs for the new user session
     await clearLogs();
     
+    _loadBalancesFromCache();
+    _initConnectivityListener();
     _establishConnection();
     fetchAccounts();
   }
@@ -107,8 +122,12 @@ class SyncProvider with ChangeNotifier {
     if (_lastUserId != null && _lastToken != null) {
       _userName = prefs.getString(_userNameKey);
       _userEmail = prefs.getString(_userEmailKey);
+      _userPhone = prefs.getString(_userPhoneKey);
+      _userProfilePic = prefs.getString(_userProfilePicKey);
       _subProvider?.setIsAdmin(prefs.getBool(_isAdminKey) ?? false);
       _loadLogsFromCache();
+      _loadBalancesFromCache();
+      _initConnectivityListener();
       _establishConnection();
       fetchAccounts();
       notifyListeners();
@@ -187,6 +206,8 @@ class SyncProvider with ChangeNotifier {
     await prefs.remove(_tokenKey);
     await prefs.remove(_userNameKey);
     await prefs.remove(_userEmailKey);
+    await prefs.remove(_userPhoneKey);
+    await prefs.remove(_userProfilePicKey);
     await prefs.remove(_isAdminKey);
     _subProvider?.setIsAdmin(false);
     _lastUserId = null;
@@ -212,6 +233,7 @@ class SyncProvider with ChangeNotifier {
     _channel = null;
     _heartbeatTimer?.cancel();
     notifyListeners();
+    _startHealthCheckLoop();
     _handleReconnect();
   }
 
@@ -223,6 +245,7 @@ class SyncProvider with ChangeNotifier {
     _channel = null;
     _heartbeatTimer?.cancel();
     notifyListeners();
+    _startHealthCheckLoop();
     _handleReconnect();
   }
 
@@ -235,7 +258,7 @@ class SyncProvider with ChangeNotifier {
     _addLog('System', 'Attempting reconnection in ${delay.inSeconds}s...', isError: true);
     
     Future.delayed(delay, () {
-      if (!_isManuallyDisconnected && _status != SyncStatus.connected && !_isConnecting) {
+      if (!_isDisposed && !_isManuallyDisconnected && _status != SyncStatus.connected && !_isConnecting) {
         _establishConnection();
       }
     });
@@ -255,7 +278,13 @@ class SyncProvider with ChangeNotifier {
 
       if (response.statusCode == 200) {
         final data = await compute(jsonDecode, response.body);
-        _accounts = data['accounts'] ?? [];
+        final List<dynamic> accountList = data['accounts'] ?? [];
+        _accounts = accountList.map((acc) {
+          final map = Map<String, dynamic>.from(acc as Map);
+          // Safely cast boolean fields from potential SQLite integers
+          map['enabled'] = map['enabled'] == 1 || map['enabled'] == true;
+          return map;
+        }).toList();
         
         // Update subscription state from the same response
         if (_subProvider != null && data['subscription'] != null) {
@@ -285,7 +314,7 @@ class SyncProvider with ChangeNotifier {
     required double lotSize,
     required String lotSizeMode,
     required String tradeType,
-    String type = 'slave',
+    String type = 'investor',
   }) async {
     if (_lastUserId == null) return false;
 
@@ -378,7 +407,8 @@ class SyncProvider with ChangeNotifier {
       if (response.statusCode == 200) {
         for (var i = 0; i < _accounts.length; i++) {
           if (_accounts[i]['id'] == accountId) {
-            _accounts[i]['enabled'] = !_accounts[i]['enabled'];
+            final bool currentEnabled = _accounts[i]['enabled'] == 1 || _accounts[i]['enabled'] == true;
+            _accounts[i]['enabled'] = !currentEnabled;
             final status = _accounts[i]['enabled'] ? 'ACTIVATED' : 'PAUSED';
             _addLog('Mirror', 'Mirroring for ${_accounts[i]['name'] ?? accountId} $status', isSuccess: _accounts[i]['enabled']);
             break;
@@ -450,8 +480,8 @@ class SyncProvider with ChangeNotifier {
         case 'position_update':
           _updatePositionState(Map<String, dynamic>.from(payload as Map));
           break;
-        case 'slave_execution_update':
-          _updateSlaveExecution(Map<String, dynamic>.from(payload as Map));
+        case 'investor_execution_update':
+          _updateInvestorExecution(Map<String, dynamic>.from(payload as Map));
           break;
         case 'account_update':
           _updateAccountMetadata(Map<String, dynamic>.from(payload as Map));
@@ -472,7 +502,30 @@ class SyncProvider with ChangeNotifier {
 
   void _updateBalances(Map<String, dynamic> payload) {
     _balances = Map<String, dynamic>.from(payload);
+    _persistBalances();
     _addLog('Sync', 'Balance update received');
+  }
+
+  void _persistBalances() {
+    try {
+      final box = Hive.box('protocol_logs'); // Reuse or create a new box if preferred
+      box.put('cached_balances', _balances);
+    } catch (e) {
+      debugPrint('Error persisting balances: $e');
+    }
+  }
+
+  void _loadBalancesFromCache() {
+    try {
+      final box = Hive.box('protocol_logs');
+      final cached = box.get('cached_balances');
+      if (cached != null) {
+        _balances = Map<String, dynamic>.from(cached as Map);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error loading cached balances: $e');
+    }
   }
 
   void _updateAccountMetadata(Map<String, dynamic> payload) {
@@ -491,7 +544,7 @@ class SyncProvider with ChangeNotifier {
         "symbol": payload['symbol'] ?? "Unknown",
         "side": payload['side'] ?? "Unknown",
         "master_status": payload['master_status'] ?? "detected",
-        "slaves": {}
+        "investors": {}
       };
       _addLog('Trade', 'DETECTED: Master ${payload['side']} ${payload['symbol']}', isSuccess: true);
     }
@@ -509,17 +562,17 @@ class SyncProvider with ChangeNotifier {
     }
   }
 
-  void _updateSlaveExecution(Map<String, dynamic> payload) {
+  void _updateInvestorExecution(Map<String, dynamic> payload) {
     final posId = payload['position_id'];
-    final slaveId = payload['slave_id'] ?? payload['account_id'];
+    final investorId = payload['investor_id'] ?? payload['account_id'];
     
     if (posId != null && _currentPositions.containsKey(posId)) {
-      final slaves = _currentPositions[posId]['slaves'] as Map<String, dynamic>;
+      final investors = _currentPositions[posId]['investors'] as Map<String, dynamic>;
       final symbol = _currentPositions[posId]['symbol'];
-      slaves[slaveId] = payload;
+      investors[investorId] = payload;
       
       final status = payload['status'].toString().toUpperCase();
-      _addLog('Execution', '$status: Mirror on Slave $slaveId for $symbol', 
+      _addLog('Execution', '$status: Mirror on Investor $investorId for $symbol', 
         isSuccess: status == 'FILLED',
         isError: status == 'FAILED'
       );
@@ -582,11 +635,58 @@ class SyncProvider with ChangeNotifier {
 
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
+    _healthCheckTimer?.cancel(); // Stop health checks when connected
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 20), (timer) {
       if (_status == SyncStatus.connected) {
         _channel?.sink.add("ping");
       } else {
         timer.cancel();
+      }
+    });
+  }
+
+  void _initConnectivityListener() {
+    _connectivitySubscription?.cancel();
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
+      // Results is a List<ConnectivityResult> in connectivity_plus 6.x
+      final hasNetwork = results.isNotEmpty && !results.contains(ConnectivityResult.none);
+      if (hasNetwork) {
+        // Only trigger if we are currently disconnected/error and not already trying to connect
+        if (_status != SyncStatus.connected && !_isConnecting && !_isManuallyDisconnected) {
+          debugPrint('Network restored. Triggering immediate reconnection.');
+          _addLog('System', 'Network restored. Reconnecting...');
+          _reconnectAttempts = 0; // Reset attempts to connect immediately
+          _establishConnection();
+        }
+      }
+    });
+  }
+
+  void _startHealthCheckLoop() {
+    if (_isManuallyDisconnected || _isDisposed || _status == SyncStatus.connected) return;
+    
+    _healthCheckTimer?.cancel();
+    _healthCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      if (_status == SyncStatus.connected || _isManuallyDisconnected || _isDisposed) {
+        timer.cancel();
+        return;
+      }
+
+      if (_isConnecting) return;
+
+      try {
+        // Ping a simple health or auth endpoint to see if server is back
+        final response = await http.get(
+          Uri.parse('${ApiConfig.baseUrl}/health'),
+        ).timeout(const Duration(seconds: 3));
+        
+        if (response.statusCode == 200 && _status != SyncStatus.connected && !_isConnecting) {
+          debugPrint('Proactive Health Check: Server is UP. Reconnecting...');
+          _reconnectAttempts = 0;
+          _establishConnection();
+        }
+      } catch (_) {
+        // Server still unreachable, continue loop
       }
     });
   }
@@ -601,7 +701,11 @@ class SyncProvider with ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _connectivitySubscription?.cancel();
+    _healthCheckTimer?.cancel();
     disconnect();
     super.dispose();
   }
 }
+
+

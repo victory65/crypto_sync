@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
-
-import '../../theme/app_colors.dart';
-import '../../widgets/common_widgets.dart';
-import '../../widgets/sync_status_pill.dart';
-import '../../providers/sync_provider.dart';
-import '../../providers/subscription_provider.dart';
-import 'add_account_screen.dart';
+import 'package:intl/intl.dart';
+import 'package:crypto_sync/theme/app_colors.dart';
+import 'package:crypto_sync/widgets/common_widgets.dart';
+import 'package:crypto_sync/widgets/sync_status_pill.dart';
+import 'package:crypto_sync/providers/sync_provider.dart';
+import 'package:crypto_sync/providers/subscription_provider.dart';
+import 'package:crypto_sync/screens/accounts/add_account_screen.dart';
 
 class AccountsOverviewScreen extends StatelessWidget {
   const AccountsOverviewScreen({super.key});
@@ -19,15 +19,14 @@ class AccountsOverviewScreen extends StatelessWidget {
     context.watch<SubscriptionProvider>();
 
     final master = syncProvider.accounts.cast<Map?>().firstWhere(
-          (a) => a != null && (a['id'] == 'master' || a['type'] == 'master'),
+          (a) => a != null && a['type'] == 'master',
           orElse: () => null,
         );
 
-    final slaves = syncProvider.accounts.where((a) {
+    final investors = syncProvider.accounts.where((a) {
       if (a is! Map) return false;
       final type = a['type']?.toString().toLowerCase();
-      final id = a['id']?.toString().toLowerCase();
-      return type == 'slave' || (type == null && id != 'master');
+      return type == 'investor';
     }).toList();
 
     return Scaffold(
@@ -64,10 +63,10 @@ class AccountsOverviewScreen extends StatelessWidget {
 
             const SizedBox(height: 32),
 
-            // ── SLAVES SECTION ───────────────────────────────────────
+            // ── INVESTORS SECTION ───────────────────────────────────────
             Row(
               children: [
-                Expanded(child: _label(context, 'SLAVE ACCOUNTS')),
+                Expanded(child: _label(context, 'INVESTOR ACCOUNTS')),
                 if (master != null)
                   TextButton.icon(
                     onPressed: () => context.push('/accounts/add'),
@@ -87,30 +86,30 @@ class AccountsOverviewScreen extends StatelessWidget {
             ),
             const SizedBox(height: 10),
 
-            // If no master, show locked slave prompt
+            // If no master, show locked investor prompt
             if (master == null)
               _LockedTile(
-                message: 'Set up a Master Account first before adding slaves.',
+                message: 'Set up a Master Account first before adding investors.',
               )
-            else if (slaves.isEmpty && !syncProvider.isFetchingAccounts)
+            else if (investors.isEmpty && !syncProvider.isFetchingAccounts)
               _AddButton(
-                label: 'Add Slave Account',
+                label: 'Add Investor Account',
                 onTap: () => context.push('/accounts/add'),
               )
-            else if (syncProvider.isFetchingAccounts && slaves.isEmpty)
+            else if (syncProvider.isFetchingAccounts && investors.isEmpty)
               const Center(
                   child: Padding(
                 padding: EdgeInsets.all(32),
                 child: CircularProgressIndicator(),
               ))
             else
-              ...slaves.asMap().entries.map((e) {
+              ...investors.asMap().entries.map((e) {
                 final idx = e.key;
-                final slave = Map<String, dynamic>.from(e.value as Map);
+                final investor = Map<String, dynamic>.from(e.value as Map);
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: _SlaveTile(
-                    slave: slave,
+                  child: _InvestorTile(
+                    investor: investor,
                     syncProvider: syncProvider,
                     index: idx,
                   ),
@@ -192,7 +191,7 @@ class _AddButton extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// LOCKED TILE — slave section locked until master is set
+// LOCKED TILE — investor section locked until master is set
 // ─────────────────────────────────────────────────────────────────
 class _LockedTile extends StatelessWidget {
   final String message;
@@ -344,38 +343,39 @@ class _MasterTile extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// SLAVE TILE — shown for each configured slave account
+// INVESTOR TILE — shown for each configured investor account
 // ─────────────────────────────────────────────────────────────────
-class _SlaveTile extends StatelessWidget {
-  final Map<String, dynamic> slave;
+class _InvestorTile extends StatelessWidget {
+  final Map<String, dynamic> investor;
   final SyncProvider syncProvider;
   final int index;
 
-  const _SlaveTile({
-    required this.slave,
+  const _InvestorTile({
+    required this.investor,
     required this.syncProvider,
     required this.index,
   });
 
   @override
   Widget build(BuildContext context) {
-    final slaveId = slave['id'];
-    final exchangeName = slave['exchange']?.toString() ?? 'Exchange';
-    final accountName = slave['name']?.toString() ?? exchangeName;
-    final dynamic rawBal = syncProvider.balances[slaveId] ?? slave['balance'];
+    final investorId = investor['id'];
+    final exchangeName = investor['exchange']?.toString() ?? 'Exchange';
+    final accountName = investor['name']?.toString() ?? exchangeName;
+    final dynamic rawBal = syncProvider.balances[investorId] ?? investor['balance'];
     final double balance = (rawBal is num)
         ? rawBal.toDouble()
         : (double.tryParse(rawBal?.toString() ?? '0') ?? 0.0);
-    final lotSize = slave['lot_size'] ?? '0.01';
-    final lotMode = slave['lot_size_mode'] == 'percentage' ? '%' : 'L';
-    final bool enabled = slave['enabled'] ?? false;
-    final bool isError = slave['sync_status']?.toString().toLowerCase() == 'error';
+    final lotSize = investor['lot_size'] ?? '0.01';
+    final lotMode = investor['lot_size_mode'] == 'percentage' ? '%' : 'L';
+    final bool enabled = investor['enabled'] == 1 || investor['enabled'] == true;
+    final bool isError = investor['sync_status']?.toString().toLowerCase() == 'error';
     final Color statusColor = isError 
         ? AppColors.danger 
         : (enabled ? AppColors.success : AppColors.textMuted);
+    final bool isMaster = investor['type'] == 'master'; // Added for the color logic, though this tile is for investors
 
     return AppCard(
-      onTap: () => context.push('/accounts/$slaveId'),
+      onTap: () => context.push('/accounts/$investorId'),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: Border.all(color: statusColor.withOpacity(0.2), width: 1),
       child: Row(
@@ -466,11 +466,14 @@ class _SlaveTile extends StatelessWidget {
                     // Balance — flexible to prevent overflow
                     Flexible(
                       child: Text(
-                        '${syncProvider.currencySymbol}${balance.toStringAsFixed(2)}',
+                        NumberFormat.currency(symbol: syncProvider.currencySymbol, decimalDigits: 2).format(balance),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: isError ? AppColors.danger : (enabled ? AppColors.success : AppColors.textMuted),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(
+                              color: isError ? AppColors.danger : (enabled || isMaster ? AppColors.success : AppColors.textMuted),
                               fontWeight: FontWeight.bold,
                             ),
                       ),
@@ -488,14 +491,14 @@ class _SlaveTile extends StatelessWidget {
             children: [
               Switch.adaptive(
                 value: enabled,
-                onChanged: (_) => syncProvider.toggleAccountSync(slaveId),
+                onChanged: (_) => syncProvider.toggleAccountSync(investorId),
                 activeColor: AppColors.success,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               GestureDetector(
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
-                      builder: (_) => AddAccountScreen(accountId: slaveId)),
+                      builder: (_) => AddAccountScreen(accountId: investorId)),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
@@ -527,3 +530,5 @@ class _SlaveTile extends StatelessWidget {
     }
   }
 }
+
+

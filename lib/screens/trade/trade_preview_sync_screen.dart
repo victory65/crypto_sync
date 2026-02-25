@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../theme/app_colors.dart';
-import '../../widgets/common_widgets.dart';
+import 'package:crypto_sync/theme/app_colors.dart';
+import 'package:crypto_sync/widgets/common_widgets.dart';
 import 'package:provider/provider.dart';
-import '../../models/trade_models.dart';
-import '../../providers/sync_provider.dart';
+import 'package:crypto_sync/models/trade_models.dart';
+import 'package:crypto_sync/providers/sync_provider.dart';
 
 class TradePreviewSyncScreen extends StatelessWidget {
   const TradePreviewSyncScreen({super.key});
@@ -13,9 +13,9 @@ class TradePreviewSyncScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final syncProvider = context.watch<SyncProvider>();
-    final activeSlaves = syncProvider.accounts.where((a) {
-      final slave = Map<String, dynamic>.from(a as Map);
-      return slave['enabled'] == true && slave['is_master'] != true;
+    final activeInvestors = syncProvider.accounts.where((a) {
+      final investor = Map<String, dynamic>.from(a as Map);
+      return investor['enabled'] == true && investor['is_master'] != true;
     }).toList();
 
     return Scaffold(
@@ -33,9 +33,9 @@ class TradePreviewSyncScreen extends StatelessWidget {
           children: [
             _buildTradeHeader(context, syncProvider),
             const SizedBox(height: 32),
-            SectionHeader(title: 'Syncing to ${activeSlaves.length} Slaves'),
+            SectionHeader(title: 'Syncing to ${activeInvestors.length} Investors'),
             const SizedBox(height: 16),
-            _buildSlaveList(context, activeSlaves),
+            _buildInvestorList(context, activeInvestors),
             const SizedBox(height: 32),
             _buildWarningCard(),
             const SizedBox(height: 48),
@@ -95,11 +95,11 @@ class TradePreviewSyncScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSlaveList(BuildContext context, List<dynamic> slaves) {
+  Widget _buildInvestorList(BuildContext context, List<dynamic> investors) {
     return Column(
-      children: slaves.map((a) {
-        final slave = Map<String, dynamic>.from(a as Map);
-        final lotSize = (slave['lot_size'] ?? 1.0).toDouble();
+      children: investors.map((a) {
+        final investor = Map<String, dynamic>.from(a as Map);
+        final lotSize = (investor['lot_size'] ?? 1.0).toDouble();
         
         return Padding(
           padding: const EdgeInsets.only(bottom: 8.0),
@@ -107,7 +107,7 @@ class TradePreviewSyncScreen extends StatelessWidget {
             children: [
               const Icon(Icons.check_circle, color: AppColors.success, size: 16),
               const SizedBox(width: 12),
-              Text(slave['exchange'] ?? 'Exchange', style: const TextStyle(fontWeight: FontWeight.w500)),
+              Text(investor['exchange'] ?? 'Exchange', style: const TextStyle(fontWeight: FontWeight.w500)),
               const Spacer(),
               Text(
                 'Size: ${(lotSize * 100).toStringAsFixed(0)}%',
@@ -130,7 +130,7 @@ class TradePreviewSyncScreen extends StatelessWidget {
           const SizedBox(width: 16),
           Expanded(
             child: Text(
-              'Trade execution is near-instant. Ensure your slave API keys have sufficient permissions.',
+              'Trade execution is near-instant. Ensure your investor API keys have sufficient permissions.',
               style: TextStyle(color: AppColors.danger.withOpacity(0.8), fontSize: 12, fontWeight: FontWeight.w500),
             ),
           ),
@@ -139,3 +139,5 @@ class TradePreviewSyncScreen extends StatelessWidget {
     );
   }
 }
+
+

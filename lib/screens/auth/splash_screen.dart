@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
-import '../../theme/app_colors.dart';
-import '../../providers/sync_provider.dart';
-import '../../providers/subscription_provider.dart';
-import '../../providers/settings_provider.dart';
-import '../../services/biometric_service.dart';
+import 'package:crypto_sync/theme/app_colors.dart';
+import 'package:crypto_sync/providers/sync_provider.dart';
+import 'package:crypto_sync/providers/subscription_provider.dart';
+import 'package:crypto_sync/providers/settings_provider.dart';
+import 'package:crypto_sync/services/biometric_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -125,3 +125,4 @@ class _SplashScreenState extends State<SplashScreen> {
         );
   }
 }
+

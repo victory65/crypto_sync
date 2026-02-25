@@ -1,10 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../../providers/settings_provider.dart';
-import '../../providers/sync_provider.dart';
-import '../../theme/app_colors.dart';
-import '../../widgets/common_widgets.dart';
+import 'package:crypto_sync/providers/settings_provider.dart';
+import 'package:crypto_sync/providers/sync_provider.dart';
+import 'package:crypto_sync/theme/app_colors.dart';
+import 'package:crypto_sync/widgets/common_widgets.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -28,7 +29,7 @@ class SettingsScreen extends StatelessWidget {
               _SettingItem(
                 icon: Icons.person_outline, 
                 title: 'Profile Information', 
-                onTap: () {}
+                onTap: () => context.push('/settings/profile'),
               ),
               _SettingItem(
                 icon: Icons.security, 
@@ -51,7 +52,7 @@ class SettingsScreen extends StatelessWidget {
               _SettingItem(
                 icon: Icons.notifications_none, 
                 title: 'Push Notifications', 
-                onTap: () {}
+                onTap: () => context.push('/settings/notifications'),
               ),
               _SettingItem(
                 icon: Icons.dark_mode_outlined, 
@@ -93,7 +94,12 @@ class SettingsScreen extends StatelessWidget {
           CircleAvatar(
             radius: 30,
             backgroundColor: AppColors.primary.withOpacity(0.1),
-            child: const Icon(Icons.person, color: AppColors.primary, size: 32),
+            backgroundImage: syncProvider.userProfilePic != null 
+                ? MemoryImage(base64Decode(syncProvider.userProfilePic!)) 
+                : null,
+            child: syncProvider.userProfilePic == null 
+                ? const Icon(Icons.person, color: AppColors.primary, size: 32)
+                : null,
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -110,10 +116,6 @@ class SettingsScreen extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.edit_outlined, size: 20),
-            onPressed: () {},
           ),
         ],
       ),

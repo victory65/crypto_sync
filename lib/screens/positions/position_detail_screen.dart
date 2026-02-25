@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
-import '../../providers/sync_provider.dart';
-import '../../widgets/common_widgets.dart';
-import '../../models/trade_models.dart';
+import 'package:crypto_sync/providers/sync_provider.dart';
+import 'package:crypto_sync/widgets/common_widgets.dart';
+import 'package:crypto_sync/models/trade_models.dart';
 
-import '../../theme/app_colors.dart';
+import 'package:crypto_sync/theme/app_colors.dart';
 
 class PositionDetailScreen extends StatelessWidget {
   final String positionId;
@@ -44,9 +44,9 @@ class PositionDetailScreen extends StatelessWidget {
           children: [
             _buildMasterHeader(context, pos, syncProvider),
             const SizedBox(height: 32),
-            const SectionHeader(title: 'Slave Execution Details'),
+            const SectionHeader(title: 'Investor Execution Details'),
             const SizedBox(height: 16),
-            _buildSlaveExecutions(context, Map<String, dynamic>.from(pos['slaves'] as Map? ?? {})),
+            _buildInvestorExecutions(context, Map<String, dynamic>.from(pos['investors'] as Map? ?? {})),
           ],
         ),
       ),
@@ -97,10 +97,10 @@ class PositionDetailScreen extends StatelessWidget {
   }
 
   int _calculateSyncProgress(Map<String, dynamic> pos) {
-    final slaves = pos['slaves'] as Map<String, dynamic>? ?? {};
-    if (slaves.isEmpty) return 0;
-    final filled = slaves.values.where((s) => s['status'] == 'filled').length;
-    return (filled / slaves.length * 100).toInt();
+    final investors = pos['investors'] as Map<String, dynamic>? ?? {};
+    if (investors.isEmpty) return 0;
+    final filled = investors.values.where((s) => s['status'] == 'filled').length;
+    return (filled / investors.length * 100).toInt();
   }
 
   Widget _buildStatItem(BuildContext context, String label, String value) {
@@ -113,19 +113,19 @@ class PositionDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSlaveExecutions(BuildContext context, Map<String, dynamic> slaves) {
-    if (slaves.isEmpty) {
+  Widget _buildInvestorExecutions(BuildContext context, Map<String, dynamic> investors) {
+    if (investors.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32.0),
-          child: Text('No slave updates yet', style: TextStyle(color: Theme.of(context).disabledColor)),
+          child: Text('No investor updates yet', style: TextStyle(color: Theme.of(context).disabledColor)),
         ),
       );
     }
 
     return Column(
-      children: slaves.entries.map((entry) {
-        final slaveId = entry.key;
+      children: investors.entries.map((entry) {
+        final investorId = entry.key;
         final data = entry.value;
         final status = data['status'] as String;
         final attempt = data['attempt'] ?? 1;
@@ -156,7 +156,7 @@ class PositionDetailScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        data['exchange'] ?? slaveId,
+                        data['exchange'] ?? investorId,
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 4),
@@ -201,3 +201,5 @@ class PositionDetailScreen extends StatelessWidget {
     );
   }
 }
+
+

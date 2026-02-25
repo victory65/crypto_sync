@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../theme/app_colors.dart';
-import '../../widgets/common_widgets.dart';
-import '../../widgets/sync_status_pill.dart';
+import 'package:crypto_sync/theme/app_colors.dart';
+import 'package:crypto_sync/widgets/common_widgets.dart';
+import 'package:crypto_sync/widgets/sync_status_pill.dart';
 // Redundant mock_data import removed
 
 import 'package:provider/provider.dart';
-import '../../providers/sync_provider.dart';
+import 'package:crypto_sync/providers/sync_provider.dart';
 
 class PositionsListScreen extends StatelessWidget {
   const PositionsListScreen({super.key});
@@ -53,12 +53,12 @@ class PositionsListScreen extends StatelessWidget {
                   itemBuilder: (context, index) {
                 final pos = displayPositions[index];
                 
-                // Calculate slave status
-                final slaves = pos['slaves'] as Map<String, dynamic>? ?? {};
-                final syncedSlaves = slaves.values.where((s) => s['status'] == 'filled').length;
-                final totalSlaves = slaves.isEmpty ? (pos['totalSlaves'] ?? 0) : slaves.length;
-                final failedSlaves = slaves.values.where((s) => s['status'] == 'failed').length;
-                final isRetrying = slaves.values.any((s) => s['status'] == 'retrying');
+                // Calculate investor status
+                final investors = pos['investors'] as Map<String, dynamic>? ?? {};
+                final syncedInvestors = investors.values.where((s) => s['status'] == 'filled').length;
+                final totalInvestors = investors.isEmpty ? (pos['totalInvestors'] ?? 0) : investors.length;
+                final failedInvestors = investors.values.where((s) => s['status'] == 'failed').length;
+                final isRetrying = investors.values.any((s) => s['status'] == 'retrying');
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 16.0),
@@ -128,12 +128,12 @@ class PositionsListScreen extends StatelessWidget {
                             _buildInfoItem(context, 'Current', (pos['currentPrice'] ?? 0.0).toStringAsFixed(2)),
                             _buildInfoItem(
                               context,
-                              'Slaves',
-                              '$syncedSlaves/$totalSlaves',
+                              'Investors',
+                              '$syncedInvestors/$totalInvestors',
                               trailing: Icon(
                                 Icons.circle,
                                 size: 8,
-                                color: failedSlaves > 0
+                                color: failedInvestors > 0
                                     ? AppColors.danger
                                     : (isRetrying ? AppColors.warning : AppColors.success),
                               ),
@@ -179,3 +179,5 @@ class PositionsListScreen extends StatelessWidget {
     );
   }
 }
+
+

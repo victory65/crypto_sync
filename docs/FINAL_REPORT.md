@@ -15,7 +15,7 @@
 - **Trade Mirroring Engine**: 
   - Concurrent execution across multiple exchanges (CCXT compatible).
   - Support for **Fixed** and **Percentage-based** lot sizing.
-  - Professional account management (Editable Master, Mandatory Slave Lot Sizes).
+  - Professional account management (Editable Master, Mandatory Investor Lot Sizes).
 - **Production-Ready Connectivity**: Successfully transitioned and stabilized connectivity using **Cloudflare Tunnels**. This provides a resilient, low-latency bridge for remote mobile access with automatic reconnection logic.
 
 ### 2. High-Fidelity Flutter Frontend
@@ -38,7 +38,7 @@
 
 ### 3. Monetization & Subscription System
 - **Tiered Plans**: Free (7-day trial), Basic ($19/mo), and Pro ($49/mo).
-- **Backend Enforcement**: Limits on slave accounts are hard-enforced via API (`403 Forbidden`).
+- **Backend Enforcement**: Limits on investor accounts are hard-enforced via API (`403 Forbidden`).
 - **Frontend Guard**: Automatic "Sync Paused" banners and upgrade modals when limits are detected.
 
 ### 4. Stability & Quality Assurance
@@ -47,7 +47,7 @@
 - **Background Performance Optimization**: Implemented `compute()` based JSON processing in `SyncProvider`, moving heavy data decoding off the main UI thread to eliminate lag.
 - **Deep-Casting Stability**: Refactored the entire UI-data boundary with explicit `Map<String, dynamic>.from()` deep-casting to ensure 100% crash-free operation.
 - **Stabilized Heartbeat**: Implemented a proactive 20-second connection pulse and robust WebSocket lifecycle management with explicit cleanup guards (`_isConnecting` flag) to completely eliminate app hangs and resource leaks.
-- **Tier-Logic Enforcement**: Verified 100% functional enforcement of slave limits (Free: 1, Basic: 5, Pro: 100) across both Backend and Frontend via the Admin Debugging Suite.
+- **Tier-Logic Enforcement**: Verified 100% functional enforcement of investor limits (Free: 1, Basic: 5, Pro: 100) across both Backend and Frontend via the Admin Debugging Suite.
 
 ## 🏗️ Technical Stack
 - **Backend**: Python 3.11+, FastAPI, Uvicorn, WebSockets, Cryptography, Bcrypt.
@@ -58,3 +58,4 @@
 The project is now in a "Build-Ready" state. All technical documentation, API guides, and creator handbooks are located in the `/docs` directory. 
 
 **Happy Mirroring!** 🚀
+

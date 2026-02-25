@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../providers/sync_provider.dart';
+import 'package:crypto_sync/providers/sync_provider.dart';
 
 enum SubscriptionPlan { free, basic, pro }
 
@@ -57,7 +57,7 @@ class SubscriptionProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  int get slaveLimit {
+  int get investorLimit {
     switch (_plan) {
       case SubscriptionPlan.free:
         return 1;
@@ -72,3 +72,4 @@ class SubscriptionProvider with ChangeNotifier {
     return _plan.name.toUpperCase();
   }
 }
+

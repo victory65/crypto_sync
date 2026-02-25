@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import '../../providers/sync_provider.dart';
-import '../../providers/settings_provider.dart';
-import '../../providers/subscription_provider.dart';
-import '../../services/biometric_service.dart';
-import '../../theme/app_colors.dart';
-import '../../core/api_config.dart';
+import 'package:crypto_sync/providers/sync_provider.dart';
+import 'package:crypto_sync/providers/settings_provider.dart';
+import 'package:crypto_sync/providers/subscription_provider.dart';
+import 'package:crypto_sync/services/biometric_service.dart';
+import 'package:crypto_sync/theme/app_colors.dart';
+import 'package:crypto_sync/core/api_config.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -76,22 +76,42 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final token = data['access_token'];
+        final twoFaRequired = data['two_fa_required'] ?? false;
         final userId = data['user_id'];
+
+        if (twoFaRequired) {
+          final tempToken = data['temp_token'];
+          if (mounted) {
+            context.push('/auth/verify-2fa', extra: {
+              'temp_token': tempToken,
+              'user_id': userId,
+            });
+          }
+          return;
+        }
+
+        final token = data['access_token'];
         final name = data['name'];
         final email = data['email'];
+        final phone = data['phone'];
         final isAdmin = data['is_admin'] ?? false;
+        final twoFaEnabled = data['two_fa_enabled'] ?? false;
 
         // Initialize Real-Time Sync
         if (mounted) {
           debugPrint('Login successful. Initializing sync for user: $userId');
           final syncProvider = context.read<SyncProvider>();
+          final settingsProvider = context.read<SettingsProvider>();
+          
+          await settingsProvider.setTwoFactorEnabled(twoFaEnabled);
+          
           await syncProvider.connect(
             userId, 
             token, 
             subProvider: context.read<SubscriptionProvider>(),
             userName: name,
             userEmail: email,
+            userPhone: phone,
             isAdmin: isAdmin,
           );
           syncProvider.addCustomLog('Auth', 'Login successful: ${_emailController.text}', isSuccess: true);
@@ -244,3 +264,4 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
+

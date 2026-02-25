@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/settings_provider.dart';
-import '../../theme/app_colors.dart';
-import '../../widgets/common_widgets.dart';
+import 'package:go_router/go_router.dart';
+import 'package:crypto_sync/providers/settings_provider.dart';
+import 'package:crypto_sync/theme/app_colors.dart';
+import 'package:crypto_sync/widgets/common_widgets.dart';
 
 class SecurityScreen extends StatelessWidget {
   const SecurityScreen({super.key});
@@ -22,7 +23,7 @@ class SecurityScreen extends StatelessWidget {
           children: [
             _buildShieldHeader(context),
             const SizedBox(height: 32),
-            _buildSecurityLevel(context),
+            _buildSecurityLevel(context, settings),
             const SizedBox(height: 32),
             _buildSection(context, 'Authentication', [
               _SecurityItem(
@@ -38,8 +39,12 @@ class SecurityScreen extends StatelessWidget {
                 icon: Icons.verified_user_outlined,
                 title: 'Two-Factor Auth (2FA)',
                 subtitle: 'Manage authenticator app',
-                trailing: const StatusBadge(label: 'OFF', color: AppColors.textMuted, small: true),
-                onTap: () => _showMocks(context, '2FA Configuration'),
+                trailing: StatusBadge(
+                  label: settings.isTwoFactorEnabled ? 'ON' : 'OFF', 
+                  color: settings.isTwoFactorEnabled ? AppColors.success : AppColors.textMuted, 
+                  small: true
+                ),
+                onTap: () => context.push('/settings/security/2fa'),
               ),
             ]),
             const SizedBox(height: 24),
@@ -48,13 +53,13 @@ class SecurityScreen extends StatelessWidget {
                 icon: Icons.devices,
                 title: 'Active Sessions',
                 subtitle: 'Manage connected devices',
-                onTap: () => _showMocks(context, 'Device Management'),
+                onTap: () => context.push('/settings/security/sessions'),
               ),
               _SecurityItem(
                 icon: Icons.history,
                 title: 'Login History',
                 subtitle: 'Review recent access attempts',
-                onTap: () => _showMocks(context, 'Security Logs'),
+                onTap: () => context.push('/settings/security/history'),
               ),
             ]),
             const SizedBox(height: 24),
@@ -63,7 +68,7 @@ class SecurityScreen extends StatelessWidget {
                 icon: Icons.password,
                 title: 'Change Password',
                 subtitle: 'Update your login credentials',
-                onTap: () => _showMocks(context, 'Password Update'),
+                onTap: () => context.push('/settings/security/change-password'),
               ),
             ]),
             const SizedBox(height: 48),
@@ -106,7 +111,29 @@ class SecurityScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSecurityLevel(BuildContext context) {
+  Widget _buildSecurityLevel(BuildContext context, SettingsProvider settings) {
+    double strength = 0.3;
+    String label = 'Fair';
+    Color color = AppColors.warning;
+    String tip = 'Enable 2FA to achieve "High" security status.';
+
+    if (settings.isTwoFactorEnabled && settings.isBiometricEnabled) {
+      strength = 1.0;
+      label = 'SECURED';
+      color = AppColors.success;
+      tip = 'Your account is protected by maximum security protocols.';
+    } else if (settings.isTwoFactorEnabled) {
+      strength = 0.7;
+      label = 'High';
+      color = AppColors.success;
+      tip = 'Great! Turn on Biometrics for instant "SECURED" status.';
+    } else if (settings.isBiometricEnabled) {
+      strength = 0.5;
+      label = 'Medium';
+      color = AppColors.warning;
+      tip = 'Enable 2FA to significantly boost your security level.';
+    }
+
     return AppCard(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -115,21 +142,21 @@ class SecurityScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Security Strength', style: TextStyle(fontWeight: FontWeight.bold)),
-              Text('Fair', style: TextStyle(color: AppColors.warning, fontWeight: FontWeight.bold)),
+              Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 12),
           LinearProgressIndicator(
-            value: 0.4,
+            value: strength,
             backgroundColor: Theme.of(context).dividerColor.withOpacity(0.1),
-            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.warning),
+            valueColor: AlwaysStoppedAnimation<Color>(color),
             borderRadius: BorderRadius.circular(10),
             minHeight: 8,
           ),
           const SizedBox(height: 12),
-          const Text(
-            'Enable 2FA to achieve "High" security status.',
-            style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+          Text(
+            tip,
+            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
           ),
         ],
       ),
@@ -190,3 +217,4 @@ class _SecurityItem {
     this.onTap,
   });
 }
+

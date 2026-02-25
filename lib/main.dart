@@ -1,32 +1,40 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'providers/sync_provider.dart';
-import 'providers/settings_provider.dart';
-import 'providers/subscription_provider.dart';
-import 'services/connectivity_service.dart';
-import 'widgets/offline_overlay.dart';
+import 'package:crypto_sync/providers/sync_provider.dart';
+import 'package:crypto_sync/providers/settings_provider.dart';
+import 'package:crypto_sync/providers/subscription_provider.dart';
+import 'package:crypto_sync/services/connectivity_service.dart';
+import 'package:crypto_sync/widgets/offline_overlay.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'theme/app_theme.dart';
-import 'theme/app_colors.dart';
-import 'screens/auth/splash_screen.dart';
-import 'screens/auth/login_screen.dart';
-import 'screens/auth/signup_screen.dart';
-import 'screens/auth/forgot_password_screen.dart';
-import 'widgets/sync_status_pill.dart';
-import 'screens/dashboard_screen.dart';
-import 'screens/positions/positions_list_screen.dart';
-import 'screens/positions/position_detail_screen.dart';
-import 'screens/accounts/accounts_overview_screen.dart';
-import 'screens/accounts/slave_detail_screen.dart';
-import 'screens/accounts/add_account_screen.dart';
-import 'screens/trade/manual_trade_setup_screen.dart';
-import 'screens/trade/trade_preview_sync_screen.dart';
-import 'screens/trade/live_execution_status_screen.dart';
-import 'screens/settings_screen.dart';
-import 'screens/settings/security_screen.dart';
-import 'screens/bots/bot_nexus_screen.dart';
-import 'screens/subscription_screen.dart';
+import 'package:crypto_sync/theme/app_theme.dart';
+import 'package:crypto_sync/theme/app_colors.dart';
+import 'package:crypto_sync/screens/auth/splash_screen.dart';
+import 'package:crypto_sync/screens/auth/login_screen.dart';
+import 'package:crypto_sync/screens/auth/signup_screen.dart';
+import 'package:crypto_sync/screens/auth/forgot_password_screen.dart';
+import 'package:crypto_sync/widgets/sync_status_pill.dart';
+import 'package:crypto_sync/screens/dashboard_screen.dart';
+import 'package:crypto_sync/screens/positions/positions_list_screen.dart';
+import 'package:crypto_sync/screens/positions/position_detail_screen.dart';
+import 'package:crypto_sync/screens/accounts/accounts_overview_screen.dart';
+import 'package:crypto_sync/screens/accounts/investor_detail_screen.dart';
+import 'package:crypto_sync/screens/accounts/add_account_screen.dart';
+import 'package:crypto_sync/screens/trade/manual_trade_setup_screen.dart';
+import 'package:crypto_sync/screens/trade/trade_preview_sync_screen.dart';
+import 'package:crypto_sync/screens/trade/live_execution_status_screen.dart';
+import 'package:crypto_sync/screens/settings_screen.dart';
+import 'package:crypto_sync/screens/settings/security_screen.dart';
+import 'package:crypto_sync/screens/settings/profile_edit_screen.dart';
+import 'package:crypto_sync/screens/settings/notifications_screen.dart';
+import 'package:crypto_sync/screens/settings/security/two_fa_screen.dart';
+import 'package:crypto_sync/screens/settings/security/active_sessions_screen.dart';
+import 'package:crypto_sync/screens/settings/security/history_screen.dart';
+import 'package:crypto_sync/screens/settings/security/change_password_screen.dart';
+import 'package:crypto_sync/screens/auth/verify_2fa_login_screen.dart';
+import 'package:crypto_sync/screens/auth/terms_screen.dart';
+import 'package:crypto_sync/screens/bots/bot_nexus_screen.dart';
+import 'package:crypto_sync/screens/subscription_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -85,8 +93,8 @@ final _router = GoRouter(
             ),
             GoRoute(
               path: ':id',
-              builder: (context, state) => SlaveDetailScreen(
-                slaveId: state.pathParameters['id']!,
+              builder: (context, state) => InvestorDetailScreen(
+                investorId: state.pathParameters['id']!,
               ),
             ),
           ],
@@ -102,12 +110,22 @@ final _router = GoRouter(
             GoRoute(
               path: 'security',
               builder: (context, state) => const SecurityScreen(),
+              routes: [
+                GoRoute(path: '2fa', builder: (context, state) => const TwoFactorAuthScreen()),
+                GoRoute(path: 'sessions', builder: (context, state) => const ActiveSessionsScreen()),
+                GoRoute(path: 'history', builder: (context, state) => const LoginHistoryScreen()),
+                GoRoute(path: 'change-password', builder: (context, state) => const ChangePasswordScreen()),
+              ]
+            ),
+            GoRoute(
+              path: 'profile',
+              builder: (context, state) => const ProfileEditScreen(),
+            ),
+            GoRoute(
+              path: 'notifications',
+              builder: (context, state) => const NotificationsScreen(),
             ),
           ],
-        ),
-        GoRoute(
-          path: '/p2p',
-          builder: (context, state) => const BotNexusScreen(),
         ),
       ],
     ),
@@ -138,6 +156,24 @@ final _router = GoRouter(
     GoRoute(
       path: '/forgot-password',
       builder: (context, state) => const ForgotPasswordScreen(),
+    ),
+    GoRoute(
+      path: '/p2p',
+      builder: (context, state) => const BotNexusScreen(),
+    ),
+    GoRoute(
+      path: '/auth/verify-2fa',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>;
+        return Verify2FALoginScreen(
+          tempToken: extra['temp_token'],
+          userId: extra['user_id'],
+        );
+      },
+    ),
+    GoRoute(
+      path: '/terms',
+      builder: (context, state) => const TermsAndServicesScreen(),
     ),
   ],
 );

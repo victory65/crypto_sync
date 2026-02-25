@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../../providers/sync_provider.dart';
-import '../../providers/subscription_provider.dart';
-import '../../theme/app_colors.dart';
-import '../../widgets/common_widgets.dart';
-import '../../models/trade_models.dart';
+import 'package:crypto_sync/providers/sync_provider.dart';
+import 'package:crypto_sync/providers/subscription_provider.dart';
+import 'package:crypto_sync/theme/app_colors.dart';
+import 'package:crypto_sync/widgets/common_widgets.dart';
+import 'package:crypto_sync/models/trade_models.dart';
 
 class AddAccountScreen extends StatefulWidget {
   final String? accountId;
@@ -26,12 +26,12 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
 
   String? _selectedExchange;
   LotSizeMode _selectedLotSizeMode = LotSizeMode.fixed;
-  TradeType _selectedTradeType = TradeType.spot;
+  String _selectedTradeTypeStr = 'spot';
   bool _isLoading = false;
   bool _isEditing = false;
   bool _isActive = true;
   bool _obscureApiSecret = true;
-  String _accountType = 'slave';
+  String _accountType = 'investor';
 
   // Field-level error messages
   String? _nameError;
@@ -54,14 +54,14 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     if (_isEditing) {
       _loadAccountData();
     } else {
-      _accountType = widget.accountType ?? 'slave';
+      _accountType = widget.accountType ?? 'investor';
     }
   }
 
   void _loadAccountData() {
     final syncProvider = context.read<SyncProvider>();
-    final account = syncProvider.accounts.firstWhere(
-      (a) => a['id'] == widget.accountId,
+    final account = syncProvider.accounts.cast<Map?>().firstWhere(
+      (a) => a != null && a['id'] == widget.accountId,
       orElse: () => null,
     );
 
@@ -69,15 +69,15 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       final data = Map<String, dynamic>.from(account as Map);
       _nameController.text = data['name'] ?? '';
       _selectedExchange = data['exchange'] != null
-          ? _supportedExchanges.firstWhere(
-              (e) => e.toLowerCase() == data['exchange'].toString().toLowerCase(),
+          ? _supportedExchanges.cast<String?>().firstWhere(
+              (e) => e != null && e.toLowerCase() == data['exchange'].toString().toLowerCase(),
               orElse: () => _supportedExchanges.first)
           : null;
       _lotSizeController.text = (data['lot_size'] ?? '').toString();
       _riskPercentController.text = (data['risk_percent'] ?? '').toString();
       _selectedLotSizeMode = data['lot_size_mode'] == 'percentage' ? LotSizeMode.percentage : LotSizeMode.fixed;
-      _selectedTradeType = data['trade_type'] == 'futures' ? TradeType.futures : TradeType.spot;
-      _accountType = data['type'] ?? 'slave';
+      _selectedTradeTypeStr = data['trade_type'] ?? 'spot';
+      _accountType = data['type'] ?? 'investor';
       _isActive = data['enabled'] ?? true;
     }
   }
@@ -129,7 +129,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       valid = false;
     }
 
-    if (_lotSizeController.text.trim().isEmpty) {
+    if (!_isMaster && _lotSizeController.text.trim().isEmpty) {
       setState(() => _lotSizeError = 'Lot size is required');
       valid = false;
     }
@@ -141,7 +141,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   Widget build(BuildContext context) {
     final title = _isEditing
         ? 'Edit Account'
-        : (_isMaster ? 'Add Master Account' : 'Add Slave Account');
+        : (_isMaster ? 'Add Master Account' : 'Add Investor Account');
 
     return Scaffold(
       appBar: AppBar(
@@ -168,7 +168,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 decoration: InputDecoration(
                   hintText: _isMaster
                       ? 'Enter master account name'
-                      : 'Enter slave account name',
+                      : 'Enter investor account name',
                   prefixIcon: const Icon(Icons.badge_outlined),
                   errorText: _nameError,
                 ),
@@ -192,23 +192,30 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
               const SizedBox(height: 28),
 
               // ── Account Type (Trade Type) ─────────────────────────
-              _fieldLabel('Account Type'),
+              _fieldLabel('Trade Execution Mode'),
               const SizedBox(height: 10),
               Center(
-                child: SegmentedButton<TradeType>(
-                  segments: const [
-                    ButtonSegment(
-                        value: TradeType.spot,
-                        label: Text('Spot'),
-                        icon: Icon(Icons.show_chart)),
-                    ButtonSegment(
-                        value: TradeType.futures,
-                        label: Text('Futures'),
-                        icon: Icon(Icons.bolt)),
-                  ],
-                  selected: {_selectedTradeType},
-                  onSelectionChanged: (s) =>
-                      setState(() => _selectedTradeType = s.first),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(
+                          value: 'spot',
+                          label: Text('Spot'),
+                          icon: Icon(Icons.show_chart)),
+                      ButtonSegment(
+                          value: 'futures',
+                          label: Text('Futures'),
+                          icon: Icon(Icons.bolt)),
+                      ButtonSegment(
+                          value: 'both',
+                          label: Text('Both'),
+                          icon: Icon(Icons.all_inclusive)),
+                    ],
+                    selected: {_selectedTradeTypeStr},
+                    onSelectionChanged: (s) =>
+                        setState(() => _selectedTradeTypeStr = s.first),
+                  ),
                 ),
               ),
 
@@ -255,50 +262,51 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
 
 
 
-              // ── Lot Size (both Master & Slave) ───────────────────────
-              _fieldLabel('Lot Size (Mandatory)'),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      controller: _lotSizeController,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      onChanged: (_) => setState(() => _lotSizeError = null),
-                      decoration: InputDecoration(
-                        hintText: 'e.g. 0.05',
-                        suffixText: _selectedLotSizeMode == LotSizeMode.percentage ? '%' : null,
-                        errorText: _lotSizeError,
+              // ── Lot Size (Investor ONLY) ───────────────────────
+              if (!_isMaster) ...[
+                _fieldLabel('Lot Size (Mandatory)'),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: _lotSizeController,
+                        keyboardType:
+                            const TextInputType.numberWithOptions(decimal: true),
+                        onChanged: (_) => setState(() => _lotSizeError = null),
+                        decoration: InputDecoration(
+                          hintText: 'e.g. 0.05',
+                          suffixText: _selectedLotSizeMode == LotSizeMode.percentage ? '%' : null,
+                          errorText: _lotSizeError,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 3,
-                    child: SegmentedButton<LotSizeMode>(
-                      segments: const [
-                        ButtonSegment(
-                            value: LotSizeMode.fixed,
-                            label: Text('Fixed'),
-                            icon: Icon(Icons.attach_money)),
-                        ButtonSegment(
-                            value: LotSizeMode.percentage,
-                            label: Text('% Bal'),
-                            icon: Icon(Icons.percent)),
-                      ],
-                      selected: {_selectedLotSizeMode},
-                      onSelectionChanged: (s) =>
-                          setState(() => _selectedLotSizeMode = s.first),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 3,
+                      child: SegmentedButton<LotSizeMode>(
+                        segments: const [
+                          ButtonSegment(
+                              value: LotSizeMode.fixed,
+                              label: Text('Fixed'),
+                              icon: Icon(Icons.attach_money)),
+                          ButtonSegment(
+                              value: LotSizeMode.percentage,
+                              label: Text('% Bal'),
+                              icon: Icon(Icons.percent)),
+                        ],
+                        selected: {_selectedLotSizeMode},
+                        onSelectionChanged: (s) =>
+                            setState(() => _selectedLotSizeMode = s.first),
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+                const SizedBox(height: 28),
+              ],
 
-              const SizedBox(height: 28),
-
-              // ── Slave-only: Risk % + Active toggle ────────────────
+              // ── Investor-only: Risk % + Active toggle ────────────────
               if (!_isMaster) ...[
                 _fieldLabel('Risk Percentage (Optional)'),
                 const SizedBox(height: 8),
@@ -401,8 +409,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         lotSize: lotSize,
         lotSizeMode:
             _selectedLotSizeMode == LotSizeMode.percentage ? 'percentage' : 'fixed',
-        tradeType:
-            _selectedTradeType == TradeType.futures ? 'futures' : 'spot',
+        tradeType: _selectedTradeTypeStr,
       );
     } else {
       success = await syncProvider.addAccount(
@@ -410,11 +417,10 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         exchange: _selectedExchange!.toLowerCase(),
         apiKey: _apiKeyController.text.trim(),
         apiSecret: _apiSecretController.text.trim(),
-        lotSize: lotSize ?? 0.01,
+        lotSize: _isMaster ? 0.0 : (lotSize ?? 0.01),
         lotSizeMode:
             _selectedLotSizeMode == LotSizeMode.percentage ? 'percentage' : 'fixed',
-        tradeType:
-            _selectedTradeType == TradeType.futures ? 'futures' : 'spot',
+        tradeType: _selectedTradeTypeStr,
         type: _accountType,
       );
     }
@@ -516,3 +522,5 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     );
   }
 }
+
+

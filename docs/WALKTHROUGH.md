@@ -4,34 +4,38 @@ Welcome to the Crypto Sync project! This guide provides a detailed look at the c
 
 ## 🛡️ Security & Access
 
-### 🔐 Biometric Lock Center
-Access the **Security Center** from the Settings menu to toggle Biometric authentication.
-*   **Mandatory Protection**: When ON, the app locks automatically every time it is placed in the background or closed.
-*   **Hardware Backed**: Uses your device's native Fingerprint or FaceID sensors.
+### 🔐 Advanced Security Center
+Access the **Security Center** from the Settings menu for comprehensive protection:
+*   **Two-Factor Authentication (2FA)**: Fully implemented TOTP flow. Generate a QR code, link to Google Authenticator, and secure your login.
+*   **Active Sessions**: View every device logged into your account and terminate unauthorized sessions instantly.
+*   **Login History**: A detailed audit log of every successful and failed login attempt, including IP and device info.
+*   **Biometric Lock**: Toggle hardware-backed (Fingerprint/FaceID) locking for immediate app protection.
 
 ### 🌓 Theme Customization
 Crypto Sync features a bespoke **Dual-Theme System**:
 *   **Dark Mode**: Optimized for low-light trading sessions.
 *   **Light Mode (Milky Green)**: A custom off-white aesthetic with sage undertones, designed to rhyme perfectly with the app's green accents.
 *   Settings are persisted automatically across sessions.
-17: 
-18: ## 👤 Profile & Session Isolation
-19: 
-20: ### 🆔 Dynamic User Profiles
-21: The legacy "John Doe" placeholder has been eliminated. The platform now dynamically captures and identifies users:
-22: *   **Real-Time Identification**: Your name and email are populated immediately upon login/signup and persisted across sessions.
-23: *   **Global Awareness**: Profile data is synced across the Settings screen and authentication flows.
-24: 
-25: ### 🧹 Session Isolation
-26: To ensure maximum privacy on shared devices:
-27: *   **Auto-Clear Protocol**: The "Live Protocol Feed" and all historical logs are explicitly wiped every time a user logs out or a new user logs in.
-28: *   **Secure State Reset**: All transient account data, positions, and balances are cleared on disconnect, ensuring a clean slate for the next session.
+
+## 👤 Profile & Session Isolation
+
+### 🆔 Dynamic User Profiles
+The platform now dynamically captures and identifies users:
+*   **Real-Time Identification**: Your name and email are populated immediately upon login/signup.
+*   **Profile Picture Persistence**: Custom profile pictures are saved to the cloud and synced across all your devices.
+*   **Global Awareness**: Profile data is synced across the Settings screen and authentication flows.
+
+### 🧹 Session Isolation
+To ensure maximum privacy on shared devices:
+*   **Auto-Clear Protocol**: The "Live Protocol Feed" and all historical logs are explicitly wiped every time a user logs out or a new user logs in.
+*   **Secure State Reset**: All transient account data, positions, and balances are cleared on disconnect, ensuring a clean slate for the next session.
+
 
 ## 📡 Real-Time Dashboard
 
 The dashboard is the nerve center of the app, providing instant feedback on your entire trading operation:
 *   **Dual Status Header**: High-visibility badges showing your server heartbeat (**ONLINE** / **OFFLINE**) and your membership state (**ACTIVE** / **EXPIRED**).
-*   **Combined Balance**: Total value across your Master and all Slave wallets.
+*   **Combined Balance**: Total value across your Master and all Investor wallets.
 *   **Professional-Grade Accounts**:
     *   Editable Master account with full API Secret support.
     *   Mandatory Lot Sizing with dual modes (**Fixed** vs **Percentage of Balance**).
@@ -44,15 +48,17 @@ The dashboard is the nerve center of the app, providing instant feedback on your
 *   **State-Aware Synchronization**: The indicator intelligently switches to **SYNC PAUSED** when a disconnection is detected, ensuring no "ghost" pulses! 👻🛑
 *   **Privacy First**: Connection logs are automatically obfuscated for enhanced security.
 *   **Refined Previews**: Accounts and Positions show a clean 3-item preview with "View All" shortcuts and clickable detail cards.
-*   **Automatic Offline Protection**: The app now features a global connectivity listener. If internet connection is lost, a premium non-dismissible overlay appears immediately, blurring the UI and preventing any interaction until the connection is restored. This ensures traders never perform actions on outdated or desynchronized data.
-*   **Anti-Flicker Debounce**: Connectivity changes are now debounced by 500ms, ensuring the UI stays stable even during brief network "blips" or rapid Wi-Fi/LTE switching.
+*   **Automatic Offline Protection**: The app features a global connectivity listener. If internet connection is lost, a premium non-dismissible overlay appears immediately.
+*   **Instant Reconnection**: Once connection is restored, the `SyncProvider` triggers an immediate handshake to resume trade mirroring without user intervention.
+*   **Anti-Flicker Debounce**: Connectivity changes are debounced by 500ms for stability during network switching.
 
 ## 📊 Mirroring & Accounts
 
-### Master-Slave Archetype
+### Master-Investor Archetype
 *   **Master Account**: Your primary execution wallet.
-*   **Mirroring Slaves**: Trading accounts that perfectly follow the Master's moves.
-*   **Lot Sizing**: Define specific quantities or percentages for each slave to manage risk.
+*   **Mirroring Investors**: Trading accounts that perfectly follow the Master's moves.
+*   **Execution Modes**: Each investor can be set to **Spot**, **Futures**, or **Both** to match your trading strategy.
+*   **Lot Sizing**: Define specific quantities or percentages for each investor to manage risk.
 
 ### Active Positions
 View live trades in real-time. If an exchange error occurs, you will see a **"RETRYING"** status badge while our backend engine automatically attempts to fix the synchronization.
@@ -61,13 +67,13 @@ View live trades in real-time. If an exchange error occurs, you will see a **"RE
 
 The system features a multi-tier monetization engine:
 ### ⛓️ Account Mirroring Logic
-The Accounts tab allows you to connect your primary (Master) and secondary (Slave) accounts.
+The Accounts tab allows you to connect your primary (Master) and secondary (Investor) accounts.
 *   **Editable Master**: You can now update your primary execution account's API credentials at any time.
-*   **Mandatory Lot Sizing**: All slaves must have a defined lot size using either **Fixed** (absolute amount) or **Percentage** (of balance) mode.
+*   **Mandatory Lot Sizing**: All investors must have a defined lot size using either **Fixed** (absolute amount) or **Percentage** (of balance) mode.
 *   **Live Status**: The Dashboard and Accounts tab provide real-time updates on your connectivity and membership level (e.g., ACTIVATED: PRO).
-*   **Free (7-Day Trial)**: Access the full system for 7 days with 1 slave account limit.
-*   **Basic**: Standard mirroring for up to 5 slave accounts (**$19/mo**).
-*   **Pro**: Professional grade with 10+ slaves and intelligent per-slave scaling (**$49/mo**).
+*   **Free (7-Day Trial)**: Access the full system for 7 days with 1 investor account limit.
+*   **Basic**: Standard mirroring for up to 5 investor accounts (**$19/mo**).
+*   **Pro**: Professional grade with 10+ investors and intelligent per-investor scaling (**$49/mo**).
 *   **Expiration Management**: If a subscription expires, the sync engine automatically pauses (`Sync paused` status), and a dashboard banner provides immediate feedback.
 
 ## 🚀 Bot Nexus (Coming Soon)
@@ -97,7 +103,7 @@ For direct functional testing on authorized administrative devices:
 1.  **Admin Check**: This menu is physically disabled and invisible for non-admin users.
 2.  Navigate to the **Dashboard** as an admin (`admin@crypto.sync`).
 2.  **Long-press** on the **Total Combined Balance** figures.
-3.  **Tier Switching**: Select any tier (Trial, Basic, Professional) to instantly update slave limits and UI status.
+3.  **Tier Switching**: Select any tier (Trial, Basic, Professional) to instantly update investor limits and UI status.
 4.  **Expire Toggle**: Toggle the "Expired Status" to verify the app's sync-pause behavior and warning overlays.
 ## 🔧 System Stability & Technical Resolution
 
@@ -117,8 +123,9 @@ The "Crypto Sync" environment has been rigorously tested and stabilized to ensur
 ### 3. Final Tunnel Verification
 - **Current URL**: The app is configured via `lib/core/api_config.dart`. Update `prodHost` with your active Cloudflare Tunnel endpoint (e.g., `your-unique-id.trycloudflare.com`).
 - **Verification**: When the backend is running and the tunnel is active, you will see a green **"ONLINE"** pill on your dashboard.
-- **Mirroring Test**: Trigger a trade simulation and watch the **Live Execution Screen** pass real-time updates from `Binance` to your `Bybit` or `Bitget` slaves.
+- **Mirroring Test**: Trigger a trade simulation and watch the **Live Execution Screen** pass real-time updates from `Binance` to your `Bybit` or `Bitget` investors.
 | **Status Clarity** | Header Row | Clear visibility of both Connection (Online) and Sub status |
 | **Protocol Feed** | Auth Events | Login successes appear in green in the feed |
 
 Everything is now fully integrated, tested, and ready for deployment! 🚀🏆
+

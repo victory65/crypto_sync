@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum TradeType { spot, futures }
+enum TradeType { spot, futures, both }
 enum OrderType { market, limit }
 enum TradeSide { buy, sell }
 enum LotSizeMode { fixed, percentage }
@@ -13,10 +13,10 @@ class Position {
   final double entryPrice;
   final double currentPrice;
   final TradeSide side;
-  final int totalSlaves;
-  final int syncedSlaves;
-  final int failedSlaves;
-  final List<SlavePosition> slavePositions;
+  final int totalInvestors;
+  final int syncedInvestors;
+  final int failedInvestors;
+  final List<InvestorPosition> investorPositions;
 
   const Position({
     required this.id,
@@ -25,10 +25,10 @@ class Position {
     required this.entryPrice,
     required this.currentPrice,
     required this.side,
-    required this.totalSlaves,
-    required this.syncedSlaves,
-    required this.failedSlaves,
-    required this.slavePositions,
+    required this.totalInvestors,
+    required this.syncedInvestors,
+    required this.failedInvestors,
+    required this.investorPositions,
   });
 
   double get pnl =>
@@ -37,15 +37,15 @@ class Position {
   double get pnlPercent => (pnl / (entryPrice * masterSize)) * 100;
 }
 
-class SlavePosition {
-  final String slaveId;
+class InvestorPosition {
+  final String investorId;
   final String exchangeName;
   final double lotSizeUsed;
   final ExecutionStatus status;
   final String? errorReason;
 
-  const SlavePosition({
-    required this.slaveId,
+  const InvestorPosition({
+    required this.investorId,
     required this.exchangeName,
     required this.lotSizeUsed,
     required this.status,
@@ -64,3 +64,4 @@ class TradeAlert {
     required this.icon,
   });
 }
+

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../theme/app_colors.dart';
-import '../widgets/common_widgets.dart';
-import '../widgets/sync_status_pill.dart';
-// Removed redundant mock_data.dart import
+import 'package:crypto_sync/theme/app_colors.dart';
+import 'package:crypto_sync/widgets/common_widgets.dart';
+import 'package:crypto_sync/widgets/sync_status_pill.dart';
 import 'package:provider/provider.dart';
-import '../providers/sync_provider.dart';
-import '../providers/subscription_provider.dart';
+import 'package:intl/intl.dart';
+import 'package:crypto_sync/providers/sync_provider.dart';
+import 'package:crypto_sync/providers/subscription_provider.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -98,9 +98,20 @@ class DashboardScreen extends StatelessWidget {
   }
 
   Widget _buildPortfolioOverview(BuildContext context, SyncProvider syncProvider, SubscriptionProvider subProvider) {
-    final double masterBalance = syncProvider.balances['master']?.toDouble() ?? 0.0;
-    final double slavesBalance = syncProvider.balances['slaves_total']?.toDouble() ?? 0.0;
-    final totalBalance = masterBalance + slavesBalance;
+    final masterAccount = syncProvider.accounts.cast<Map?>().firstWhere(
+      (a) => a is Map && a['type'] == 'master',
+      orElse: () => null,
+    );
+    final double masterBalance = masterAccount != null 
+        ? (syncProvider.balances[masterAccount['id']]?.toDouble() ?? (masterAccount['balance'] as num).toDouble())
+        : 0.0;
+    final double investorsBalance = syncProvider.balances['investors_total']?.toDouble() ?? 0.0;
+    final totalBalance = masterBalance + investorsBalance;
+    final formatter = NumberFormat.currency(symbol: syncProvider.currencySymbol, decimalDigits: 2);
+    // Use a fixed locale for internal splitting to avoid issues with comma-decimal locales
+    final usFormatter = NumberFormat.currency(symbol: '', decimalDigits: 2, locale: 'en_US');
+    final formattedStr = usFormatter.format(totalBalance).trim();
+    final balanceParts = formattedStr.contains('.') ? formattedStr.split('.') : [formattedStr, '00'];
 
     return Container(
       width: double.infinity,
@@ -187,7 +198,7 @@ class DashboardScreen extends StatelessWidget {
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              totalBalance.toStringAsFixed(2).split('.')[0],
+                              balanceParts[0],
                               style: Theme.of(context).textTheme.displayLarge?.copyWith(
                                     fontWeight: FontWeight.w900,
                                     letterSpacing: -1,
@@ -195,7 +206,7 @@ class DashboardScreen extends StatelessWidget {
                                   ),
                             ),
                             Text(
-                              '.${totalBalance.toStringAsFixed(2).split('.')[1]}',
+                              '.${balanceParts[1]}',
                               style: Theme.of(context).textTheme.displaySmall?.copyWith(
                                     fontWeight: FontWeight.w600,
                                     color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.5),
@@ -248,7 +259,9 @@ class DashboardScreen extends StatelessWidget {
                       child: _buildBalanceMetric(
                         context,
                         'MASTER',
-                        '${syncProvider.currencySymbol}${masterBalance.toStringAsFixed(2)}',
+                        masterBalance >= 1000000 
+                          ? NumberFormat.compactCurrency(symbol: syncProvider.currencySymbol).format(masterBalance)
+                          : formatter.format(masterBalance),
                         AppColors.primary,
                         Icons.account_balance_wallet_outlined,
                       ),
@@ -261,8 +274,10 @@ class DashboardScreen extends StatelessWidget {
                     Expanded(
                       child: _buildBalanceMetric(
                         context,
-                        'SLAVES',
-                        '${syncProvider.currencySymbol}${slavesBalance.toStringAsFixed(2)}',
+                        'INVESTORS',
+                        investorsBalance >= 1000000
+                          ? NumberFormat.compactCurrency(symbol: syncProvider.currencySymbol).format(investorsBalance)
+                          : formatter.format(investorsBalance),
                         AppColors.success,
                         Icons.group_work_outlined,
                       ),
@@ -404,7 +419,7 @@ class DashboardScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '[${log['timestamp'].toString().substring(11, 16)}]',
+                '[${_formatTimestamp(log['timestamp'])}]',
                 style: TextStyle(
                   color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.5),
                   fontSize: 10,
@@ -432,18 +447,17 @@ class DashboardScreen extends StatelessWidget {
   }
 
   Widget _buildAccountsPreview(BuildContext context, SyncProvider syncProvider) {
-    final master = syncProvider.accounts.firstWhere(
-      (a) => a is Map && (a['type'] == 'master' || a['id'] == 'master'),
+    final master = syncProvider.accounts.cast<Map?>().firstWhere(
+      (a) => a is Map && a['type'] == 'master',
       orElse: () => null,
     );
-    final slaves = syncProvider.accounts.where((a) {
+    final investors = syncProvider.accounts.where((a) {
       if (a is! Map) return false;
       final type = a['type']?.toString().toLowerCase();
-      final id = a['id']?.toString().toLowerCase();
-      return type == 'slave' || (type == null && id != 'master');
+      return type == 'investor';
     }).take(2).toList();
 
-    if (master == null && slaves.isEmpty) {
+    if (master == null && investors.isEmpty) {
       return AppCard(
         padding: const EdgeInsets.all(24),
         child: Center(
@@ -469,7 +483,7 @@ class DashboardScreen extends StatelessWidget {
           _buildAccountCard(context, master as Map<String, dynamic>, syncProvider, isMaster: true),
           const SizedBox(height: 12),
         ],
-        ...slaves.map((s) => Padding(
+        ...investors.map((s) => Padding(
           padding: const EdgeInsets.only(bottom: 12.0),
           child: _buildAccountCard(context, s as Map<String, dynamic>, syncProvider),
         )),
@@ -488,7 +502,7 @@ class DashboardScreen extends StatelessWidget {
     
     final lotSize = account['lot_size'] ?? '0.01';
     final lotMode = account['lot_size_mode'] == 'percentage' ? '%' : 'L';
-    final bool enabled = account['enabled'] ?? false;
+    final bool enabled = account['enabled'] == 1 || account['enabled'] == true;
     final bool isError = account['sync_status']?.toString().toLowerCase() == 'error';
     final Color statusColor = isMaster 
         ? AppColors.primary 
@@ -595,7 +609,7 @@ class DashboardScreen extends StatelessWidget {
                     ),
                     Flexible(
                       child: Text(
-                        '${syncProvider.currencySymbol}${balance.toStringAsFixed(2)}',
+                        NumberFormat.currency(symbol: syncProvider.currencySymbol, decimalDigits: 2).format(balance),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                         style: Theme.of(context)
@@ -627,7 +641,7 @@ class DashboardScreen extends StatelessWidget {
   }
 
 
-  Color _slaveStatusColor(dynamic status) {
+  Color _investorStatusColor(dynamic status) {
     switch (status?.toString().toLowerCase()) {
       case 'delayed': return Colors.amber;
       case 'error': return AppColors.danger;
@@ -653,9 +667,9 @@ class DashboardScreen extends StatelessWidget {
 
     return Column(
       children: positions.where((p) => p is Map).map((pos) {
-        final slaves = (pos as Map)['slaves'] as Map<String, dynamic>? ?? {};
-        final syncedCount = slaves.values.where((s) => s['status'] == 'filled').length;
-        final totalCount = slaves.length;
+        final investors = (pos as Map)['investors'] as Map<String, dynamic>? ?? {};
+        final syncedCount = investors.values.where((s) => s['status'] == 'filled').length;
+        final totalCount = investors.length;
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 12.0),
@@ -688,7 +702,7 @@ class DashboardScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Mirroring to $syncedCount/$totalCount Slaves',
+                        'Mirroring to $syncedCount/$totalCount Investors',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -745,15 +759,15 @@ class DashboardScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Switch between tiers to verify slave limits and UI behavior.',
+                'Switch between tiers to verify investor limits and UI behavior.',
                 style: TextStyle(color: Colors.white60, fontSize: 12),
               ),
               const SizedBox(height: 24),
-              _buildDebugTierItem(context, 'Trial (FREE)', 'Limit: 1 Slave', SubscriptionPlan.free, subProvider),
+              _buildDebugTierItem(context, 'Trial (FREE)', 'Limit: 1 Investor', SubscriptionPlan.free, subProvider),
               const SizedBox(height: 12),
-              _buildDebugTierItem(context, 'Basic TIER', 'Limit: 5 Slaves', SubscriptionPlan.basic, subProvider),
+              _buildDebugTierItem(context, 'Basic TIER', 'Limit: 5 Investors', SubscriptionPlan.basic, subProvider),
               const SizedBox(height: 12),
-              _buildDebugTierItem(context, 'Professional', 'Limit: 100+ Slaves', SubscriptionPlan.pro, subProvider),
+              _buildDebugTierItem(context, 'Professional', 'Limit: 100+ Investors', SubscriptionPlan.pro, subProvider),
               const SizedBox(height: 24),
               const Divider(color: Colors.white12),
               const SizedBox(height: 16),
@@ -849,6 +863,15 @@ class DashboardScreen extends StatelessWidget {
       ),
     );
   }
+  String _formatTimestamp(dynamic timestamp) {
+    if (timestamp == null) return '00:00';
+    final str = timestamp.toString();
+    if (str.length < 16) {
+      if (str.contains('T')) return str.split('T').last.substring(0, 5);
+      return str.length > 5 ? str.substring(0, 5) : str;
+    }
+    return str.substring(11, 16);
+  }
 }
 
 class _SparklinePainter extends CustomPainter {
@@ -875,3 +898,5 @@ class _SparklinePainter extends CustomPainter {
   @override
   bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
+
+

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
+import 'package:crypto_sync/theme/app_colors.dart';
 
 class AppCard extends StatelessWidget {
   final Widget child;
@@ -8,6 +8,7 @@ class AppCard extends StatelessWidget {
   final Color? color;
   final double borderRadius;
   final Border? border;
+  final EdgeInsetsGeometry? margin;
 
   const AppCard({
     super.key,
@@ -17,6 +18,7 @@ class AppCard extends StatelessWidget {
     this.color,
     this.borderRadius = 16,
     this.border,
+    this.margin,
   });
 
   @override
@@ -24,6 +26,7 @@ class AppCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
+        margin: margin,
         padding: padding ?? const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: color ?? Theme.of(context).cardTheme.color,
@@ -335,3 +338,4 @@ class GradientButton extends StatelessWidget {
     );
   }
 }
+

@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../theme/app_colors.dart';
-import '../../widgets/common_widgets.dart';
+import 'package:crypto_sync/theme/app_colors.dart';
+import 'package:crypto_sync/widgets/common_widgets.dart';
 import 'package:provider/provider.dart';
-import '../../providers/sync_provider.dart';
-import '../../models/account_models.dart';
-import '../../models/trade_models.dart';
+import 'package:crypto_sync/providers/sync_provider.dart';
+import 'package:crypto_sync/models/account_models.dart';
+import 'package:crypto_sync/models/trade_models.dart';
 
-class SlaveDetailScreen extends StatefulWidget {
-  final String slaveId;
+class InvestorDetailScreen extends StatefulWidget {
+  final String investorId;
 
-  const SlaveDetailScreen({super.key, required this.slaveId});
+  const InvestorDetailScreen({super.key, required this.investorId});
 
   @override
-  State<SlaveDetailScreen> createState() => _SlaveDetailScreenState();
+  State<InvestorDetailScreen> createState() => _InvestorDetailScreenState();
 }
 
-class _SlaveDetailScreenState extends State<SlaveDetailScreen> {
+class _InvestorDetailScreenState extends State<InvestorDetailScreen> {
   final _lotSizeController = TextEditingController();
   LotSizeMode _selectedLotSizeMode = LotSizeMode.fixed;
   TradeType _selectedTradeType = TradeType.spot;
@@ -32,8 +32,8 @@ class _SlaveDetailScreenState extends State<SlaveDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final syncProvider = context.watch<SyncProvider>();
-    final account = syncProvider.accounts.firstWhere(
-      (a) => a['id'] == widget.slaveId,
+    final account = syncProvider.accounts.cast<Map?>().firstWhere(
+      (a) => a != null && a['id'] == widget.investorId,
       orElse: () => null,
     );
 
@@ -44,18 +44,25 @@ class _SlaveDetailScreenState extends State<SlaveDetailScreen> {
       );
     }
 
-    final slave = Map<String, dynamic>.from(account as Map);
+    final investor = Map<String, dynamic>.from(account as Map);
     
     if (!_isDataLoaded) {
-      _lotSizeController.text = (slave['lot_size'] ?? 0.01).toString();
-      _selectedLotSizeMode = slave['lot_size_mode'] == 'percentage' ? LotSizeMode.percentage : LotSizeMode.fixed;
-      _selectedTradeType = slave['trade_type'] == 'futures' ? TradeType.futures : TradeType.spot;
+      _lotSizeController.text = (investor['lot_size'] ?? 0.01).toString();
+      _selectedLotSizeMode = investor['lot_size_mode'] == 'percentage' ? LotSizeMode.percentage : LotSizeMode.fixed;
+      final tt = investor['trade_type']?.toString().toLowerCase();
+      if (tt == 'futures') {
+        _selectedTradeType = TradeType.futures;
+      } else if (tt == 'both') {
+        _selectedTradeType = TradeType.both;
+      } else {
+        _selectedTradeType = TradeType.spot;
+      }
       _isDataLoaded = true;
     }
 
-    final dynamic rawBalance = syncProvider.balances[widget.slaveId] ?? slave['balance'];
+    final dynamic rawBalance = syncProvider.balances[widget.investorId] ?? investor['balance'];
     final double balance = (rawBalance is num) ? rawBalance.toDouble() : (double.tryParse(rawBalance?.toString() ?? '0') ?? 0.0);
-    final String exchangeName = slave['exchange']?.toString() ?? 'Exchange';
+    final String exchangeName = investor['exchange']?.toString() ?? 'Exchange';
 
     return Scaffold(
       appBar: AppBar(
@@ -85,7 +92,7 @@ class _SlaveDetailScreenState extends State<SlaveDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        slave['name'] ?? exchangeName,
+                        investor['name'] ?? exchangeName,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 4),
@@ -102,14 +109,14 @@ class _SlaveDetailScreenState extends State<SlaveDetailScreen> {
             const SizedBox(height: 32),
             _buildBalanceCard(context, exchangeName, balance, syncProvider.currencySymbol),
             const SizedBox(height: 32),
-            _buildSettingsList(context, slave, syncProvider),
+            _buildSettingsList(context, investor, syncProvider),
             const SizedBox(height: 32),
             GradientButton(
               label: _isLoading ? 'Saving...' : 'Save Settings',
               onPressed: _isLoading ? null : () => _handleSave(syncProvider),
             ),
             const SizedBox(height: 40),
-            _buildDangerZone(context, widget.slaveId, syncProvider),
+            _buildDangerZone(context, widget.investorId, syncProvider),
           ],
         ),
       ),
@@ -119,10 +126,10 @@ class _SlaveDetailScreenState extends State<SlaveDetailScreen> {
   Future<void> _handleSave(SyncProvider syncProvider) async {
     setState(() => _isLoading = true);
     final success = await syncProvider.updateAccount(
-      accountId: widget.slaveId,
+      accountId: widget.investorId,
       lotSize: double.tryParse(_lotSizeController.text),
       lotSizeMode: _selectedLotSizeMode == LotSizeMode.percentage ? 'percentage' : 'fixed',
-      tradeType: _selectedTradeType == TradeType.futures ? 'futures' : 'spot',
+      tradeType: _selectedTradeType.name,
     );
     
     if (mounted) {
@@ -164,7 +171,7 @@ class _SlaveDetailScreenState extends State<SlaveDetailScreen> {
     );
   }
 
-  Widget _buildSettingsList(BuildContext context, Map<String, dynamic> slave, SyncProvider syncProvider) {
+  Widget _buildSettingsList(BuildContext context, Map<String, dynamic> investor, SyncProvider syncProvider) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -178,8 +185,8 @@ class _SlaveDetailScreenState extends State<SlaveDetailScreen> {
                 children: [
                   const Text('Enable Mirroring', style: TextStyle(fontWeight: FontWeight.bold)),
                   Switch.adaptive(
-                    value: slave['enabled'] ?? false,
-                    onChanged: (val) => syncProvider.toggleAccountSync(widget.slaveId),
+                    value: investor['enabled'] == 1 || investor['enabled'] == true,
+                    onChanged: (val) => syncProvider.toggleAccountSync(widget.investorId),
                     activeColor: AppColors.success,
                   ),
                 ],
@@ -188,15 +195,19 @@ class _SlaveDetailScreenState extends State<SlaveDetailScreen> {
               const Text('Trade Type', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
               Center(
-                child: SegmentedButton<TradeType>(
-                  segments: const [
-                    ButtonSegment(value: TradeType.spot, label: Text('Spot'), icon: Icon(Icons.show_chart)),
-                    ButtonSegment(value: TradeType.futures, label: Text('Futures'), icon: Icon(Icons.bolt)),
-                  ],
-                  selected: {_selectedTradeType},
-                  onSelectionChanged: (Set<TradeType> selection) {
-                    setState(() => _selectedTradeType = selection.first);
-                  },
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SegmentedButton<TradeType>(
+                    segments: const [
+                      ButtonSegment(value: TradeType.spot, label: Text('Spot'), icon: Icon(Icons.show_chart)),
+                      ButtonSegment(value: TradeType.futures, label: Text('Futures'), icon: Icon(Icons.bolt)),
+                      ButtonSegment(value: TradeType.both, label: Text('Both'), icon: Icon(Icons.all_inclusive)),
+                    ],
+                    selected: {_selectedTradeType},
+                    onSelectionChanged: (Set<TradeType> selection) {
+                      setState(() => _selectedTradeType = selection.first);
+                    },
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -341,3 +352,5 @@ class _SlaveDetailScreenState extends State<SlaveDetailScreen> {
     );
   }
 }
+
+

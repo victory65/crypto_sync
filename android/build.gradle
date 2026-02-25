@@ -5,8 +5,8 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        // This is where that line goes!
-        classpath 'com.android.tools.build:gradle:8.2.2'
+        // Updated AGP to 8.9.1
+        classpath 'com.android.tools.build:gradle:8.9.1'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.22" 
     }
 }

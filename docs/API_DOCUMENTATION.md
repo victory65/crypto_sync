@@ -33,7 +33,7 @@ The Crypto Sync backend is built with FastAPI and provides endpoints for authent
       "exchange": "binance",
       "api_key": "your_key",
       "api_secret": "your_secret",
-      "type": "slave",
+      "type": "investor",
       "lot_size": 0.01,
       "lot_size_mode": "fixed",
       "trade_type": "spot"
@@ -43,21 +43,60 @@ The Crypto Sync backend is built with FastAPI and provides endpoints for authent
 
 ### Update Account
 *   **Endpoint**: `POST /accounts/{user_id}/update/{account_id}`
-*   **Body**: Same as Add Account (all fields optional).
+*   **Body**: Same as Add Account (all fields optional). Support `trade_type: "both"`.
 *   **Returns**: Updated account object.
 *   **Enforcement**: Returns `403 Forbidden` if plan limits (Free/Basic) are reached.
 
-### Delete Account (Slave)
-*   **Endpoint**: `DELETE /accounts/{user_id}/delete/{account_id}`
+### Delete Account (Investor)
+*   **Endpoint**: `DELETE /accounts/{user_id}/{account_id}`
 *   **Returns**: `200 OK` on success.
+
+## 🔐 Advanced Security (2FA)
+
+### Setup 2FA
+*   **Endpoint**: `POST /auth/2fa/setup?user_id={user_id}`
+*   **Returns**: `{"secret": "BASE32_SECRET", "qr_code": "BASE64_PNG"}`
+
+### Enable 2FA
+*   **Endpoint**: `POST /auth/2fa/enable?user_id={user_id}`
+*   **Body**: `{"secret": "...", "code": "6_DIGIT_TOTP"}`
+*   **Returns**: `200 OK` on success.
+
+### Disable 2FA
+*   **Endpoint**: `POST /auth/2fa/disable?user_id={user_id}`
+*   **Returns**: `200 OK` on success.
+
+### Verify 2FA Login
+*   **Endpoint**: `POST /auth/verify-2fa`
+*   **Body**: `{"temp_token": "...", "code": "..."}`
+*   **Returns**: Full user object and JWT access token.
+
+## 👤 User & Session Management
+
+### Update Profile
+*   **Endpoint**: `POST /auth/profile/update?user_id={user_id}`
+*   **Body**: `{"name": "...", "phone": "...", "email": "...", "profile_pic": "BASE64"}`
+*   **Returns**: `200 OK`.
+
+### Get Active Sessions
+*   **Endpoint**: `GET /auth/sessions/{user_id}`
+*   **Returns**: List of active device sessions.
+
+### Terminate Session
+*   **Endpoint**: `POST /auth/sessions/logout?session_id={id}`
+*   **Returns**: `200 OK`.
+
+### Get Login History
+*   **Endpoint**: `GET /auth/logs/{user_id}`
+*   **Returns**: List of recent login attempts (success/fail).
 
 ## 💳 Subscription Plans
 
 | Tier | Limits | Price |
 | :--- | :--- | :--- |
-| **Free** | 1 Master, 1 Slave | 7-Day Trial only |
-| **Basic** | 1 Master, 5 Slaves | $19 / month |
-| **Pro** | 1 Master, 10+ Slaves | $49 / month + $5/extra |
+| **Free** | 1 Master, 1 Investor | 7-Day Trial only |
+| **Basic** | 1 Master, 5 Investors | $19 / month |
+| **Pro** | 1 Master, 10+ Investors | $49 / month + $5/extra |
 
 ## 🛰️ Real-Time Sync (WebSockets)
 
@@ -69,9 +108,9 @@ The Crypto Sync backend is built with FastAPI and provides endpoints for authent
 
 ### Incoming Event Types (Server -> Client)
 *   **`sync_status_update`**: Engine heartbeat and status updates.
-*   **`balance_update`**: Real-time balance changes for Master/Slave accounts.
+*   **`balance_update`**: Real-time balance changes for Master/Investor accounts.
 *   **`position_update`**: Creation, update, or deletion of trade positions.
-*   **`slave_execution_update`**: Progress of a specific slave account mirroring a trade.
+*   **`investor_execution_update`**: Progress of a specific investor account mirroring a trade.
 *   **`system_log`**: Log messages for the **Live Protocol Feed** (populated automatically and persisted via Hive). Includes special event markers:
     - `DETECTED`: Master trade opening
     - `CLOSED`: Master trade liquidation
@@ -111,3 +150,4 @@ These endpoints are used to test the real-time responsiveness of the mobile app.
   "pnl": 120.0
 }
 ```
+

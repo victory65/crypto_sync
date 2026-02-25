@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import '../../providers/sync_provider.dart';
-import '../../providers/subscription_provider.dart';
-import '../../theme/app_colors.dart';
-import '../../core/api_config.dart';
+import 'package:crypto_sync/providers/sync_provider.dart';
+import 'package:crypto_sync/providers/subscription_provider.dart';
+import 'package:crypto_sync/theme/app_colors.dart';
+import 'package:crypto_sync/core/api_config.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -18,22 +18,43 @@ class SignupScreen extends StatefulWidget {
 class _SignupScreenState extends State<SignupScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
   bool _isLoading = false;
+  bool _agreeToTerms = false;
+  String _selectedCountryCode = '+1';
+
+  final List<String> _countryCodes = [
+    '+1', '+7', '+20', '+27', '+30', '+31', '+32', '+33', '+34', '+36', '+39',
+    '+40', '+41', '+43', '+44', '+45', '+46', '+47', '+48', '+49', '+51',
+    '+52', '+53', '+54', '+55', '+56', '+57', '+58', '+60', '+61', '+62',
+    '+63', '+64', '+65', '+66', '+81', '+82', '+84', '+86', '+90', '+91',
+    '+92', '+93', '+94', '+95', '+98', '+212', '+234', '+254', '+351', '+353',
+    '+358', '+372', '+380', '+420', '+852', '+886', '+961', '+962', '+966',
+    '+971', '+972'
+  ];
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _handleSignup() async {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty || _phoneController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email and password are required')),
+        const SnackBar(content: Text('All fields are required')),
+      );
+      return;
+    }
+
+    if (!_agreeToTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You must agree to the Terms & Services')),
       );
       return;
     }
@@ -49,6 +70,7 @@ class _SignupScreenState extends State<SignupScreen> {
           'email': _emailController.text,
           'password': _passwordController.text,
           'name': _nameController.text,
+          'phone': '$_selectedCountryCode ${_phoneController.text}',
         }),
       ).timeout(const Duration(seconds: 10));
 
@@ -60,6 +82,7 @@ class _SignupScreenState extends State<SignupScreen> {
         final userId = data['user_id'];
         final name = data['name'];
         final email = data['email'];
+        final phone = data['phone'];
         final isAdmin = data['is_admin'] ?? false;
 
         if (mounted) {
@@ -71,6 +94,7 @@ class _SignupScreenState extends State<SignupScreen> {
             subProvider: context.read<SubscriptionProvider>(),
             userName: name,
             userEmail: email,
+            userPhone: phone,
             isAdmin: isAdmin,
           );
           syncProvider.addCustomLog('Auth', 'Account created: ${_emailController.text}', isSuccess: true);
@@ -179,6 +203,78 @@ class _SignupScreenState extends State<SignupScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 24),
+              Text(
+                'Phone Number',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Container(
+                    width: 90,
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _selectedCountryCode,
+                        isExpanded: true,
+                        items: _countryCodes.map((code) => DropdownMenuItem(
+                          value: code,
+                          child: Text(code, style: const TextStyle(fontSize: 14)),
+                        )).toList(),
+                        onChanged: (val) => setState(() => _selectedCountryCode = val!),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _phoneController,
+                      decoration: const InputDecoration(
+                        hintText: '234 567 890',
+                        prefixIcon: Icon(Icons.phone_outlined),
+                      ),
+                      keyboardType: TextInputType.phone,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Checkbox(
+                    value: _agreeToTerms,
+                    onChanged: (val) => setState(() => _agreeToTerms = val ?? false),
+                    activeColor: AppColors.primary,
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => context.push('/terms'),
+                      child: Text.rich(
+                        TextSpan(
+                          text: 'I agree to the ',
+                          children: [
+                            TextSpan(
+                              text: 'Terms & Services',
+                              style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+                            ),
+                            const TextSpan(text: ' and '),
+                            TextSpan(
+                              text: 'Privacy Policy',
+                              style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 32),
               ElevatedButton(
                 onPressed: _isLoading ? null : _handleSignup,
@@ -211,3 +307,4 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 }
+

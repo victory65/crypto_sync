@@ -2,7 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
-import '../services/connectivity_service.dart';
+import 'package:crypto_sync/services/connectivity_service.dart';
 
 class OfflineOverlay extends StatelessWidget {
   final Widget child;
@@ -90,3 +90,4 @@ class OfflineOverlay extends StatelessWidget {
     );
   }
 }
+

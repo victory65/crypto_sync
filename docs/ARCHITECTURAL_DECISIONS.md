@@ -19,8 +19,8 @@ graph TD
         HTTP <--> REST[Auth & Simulation API]
         REST --> SEC[Security: Fernet & Bcrypt]
         WS_M <--> ENG[Trade Engine]
-        ENG --> CCXT[Mock CCXT Library]
-        SEC --> DB[(Mock DB: Encrypted at Rest)]
+        ENG --> CCXT[Real CCXT Engine]
+        SEC --> DB[(SQLite: WAL Mode)]
     end
 ```
 
@@ -31,9 +31,10 @@ Sensitive exchange API keys and secrets are protected using a multi-layer strate
 *   **Decrypted JIT**: Keys are stored encrypted using **AES-256 (Fernet)**. They are only decrypted in volatile memory (RAM) during the exact moment of trade execution.
 *   **Zero-Knowledge Frontend**: The mobile application never stores or receives raw secret keys. It only handles public identifiers and masked values.
 
-### Authentication
-*   **JWT (JSON Web Tokens)**: All communication (REST and WebSocket) is secured via JWT.
-*   **Bcrypt**: User passwords are salted and hashed using Bcrypt before storage to ensure they can never be recovered in plaintext.
+### Authentication & 2FA
+*   **JWT (JSON Web Tokens)**: All communication is secured via JWT with strict expiry.
+*   **2FA (TOTP)**: Mandatory 2FA support using `pyotp` and `qrcode` for account protection.
+*   **Bcrypt**: User passwords are salted and hashed using Bcrypt.
 
 ### Biometric Lock
 The mobile app implements a **Mandatory Biometric Hook**. When enabled, the local session token is protected by the device's hardware security (Secure Enclave/TrustZone).
@@ -41,15 +42,18 @@ The mobile app implements a **Mandatory Biometric Hook**. When enabled, the loca
 ## 📡 Real-Time Synchronization
 
 Instead of inefficient polling, Crypto Sync uses a **Push-Based Architecture** via WebSockets:
-*   **Heartbeat Mechanism**: Ensures connection liveness and handles silent disconnections.
-*   **Exponential Backoff**: The Flutter client automatically attempts reconnection with increasing delays to ensure stability.
+*   **Heartbeat Mechanism**: Ensures connection liveness and handles silent disconnections (20s pulse).
+*   **Smart Reconnection Logic**:
+    - **Connectivity Listener**: The app uses `connectivity_plus` to monitor network state on mobile devices.
+    - **Instant Recovery**: Triggers an immediate handshake when network restoration is detected, bypassing the passive delay.
+    - **Exponential Backoff**: For server-side recovery or persistent failures, a capped (30s) exponential backoff loop is utilized.
 *   **State Projection**: The `SyncProvider` in Flutter acts as a projection of the backend's current state.
 *   **Persistent Protocol Feed**: System logs are stored locally using **Hive**, ensuring historical audit trails survive app restarts and are re-populated instantly on launch.
 
 ## ⚙️ Trade Engine
 
 ### Mirroring Logic
-*   **Parallel Broadcasting**: Trades are mirrored to "Slave" accounts concurrently to minimize slippage.
+*   **Parallel Broadcasting**: Trades are mirrored to "Investor" accounts concurrently to minimize slippage.
 *   **Retry Engine**: A robust 3-retry mechanism handles transient exchange errors, with shimmering status indicators providing user feedback.
 
 ## 💳 Monetization & Access Control
@@ -97,3 +101,4 @@ The platform implements a **Hard-Enforced Subscription Model**:
 *   **Decision**: Introduced editable Master accounts and mandatory lot-sizing parameters (Fixed/Percentage).
 *   **Rationale**: To provide institutional-grade control over mirroring risk.
 *   **Implementation**: Utilized a specialized `StatusBadge` in `common_widgets.dart` and real-time dependency injection of `SubscriptionProvider` into Dashboard helper methods.
+
