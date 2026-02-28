@@ -10,7 +10,7 @@ from core.security import decode_access_token, verify_password, create_access_to
 from core.websocket import manager, broadcast_event
 from core.logger import system_logger, auth_logger
 from engine.trade_engine import engine
-from core.database import get_db_connection, init_db
+from core.database import get_db, init_db
 import pyotp
 import contextlib
 import qrcode
@@ -20,7 +20,7 @@ import base64
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    init_db()
+    await init_db()
     await engine.start()
     yield
     # Shutdown
@@ -63,44 +63,34 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, token: Optional
 
 # --- REST Endpoints (Auth & Simulation) ---
 
-# --- Database Helpers ---
+# --- Database Helpers (Async) ---
 
-def get_user_by_email(email: str):
-    conn = get_db_connection()
-    user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-    conn.close()
-    return dict(user) if user else None
+async def get_user_by_email(email: str):
+    async with get_db() as conn:
+        async with conn.execute("SELECT * FROM users WHERE email = ?", (email,)) as cursor:
+            user = await cursor.fetchone()
+            return dict(user) if user else None
 
-def get_user_by_id(user_id: str):
-    conn = get_db_connection()
-    user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-    conn.close()
-    return dict(user) if user else None
+async def get_user_by_id(user_id: str):
+    async with get_db() as conn:
+        async with conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)) as cursor:
+            user = await cursor.fetchone()
+            return dict(user) if user else None
 
-def get_user_accounts(user_id: str):
-    conn = get_db_connection()
-    rows = conn.execute("SELECT * FROM accounts WHERE user_id = ?", (user_id,)).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+async def get_user_accounts(user_id: str):
+    async with get_db() as conn:
+        async with conn.execute("SELECT * FROM accounts WHERE user_id = ?", (user_id,)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
 
-def log_login_attempt(user_id: str, ip: str, device: str, status: str):
-    conn = get_db_connection()
-    conn.execute(
-        "INSERT INTO login_history (user_id, timestamp, ip_address, device_name, status) VALUES (?, ?, ?, ?, ?)",
-        (user_id, datetime.now().isoformat(), ip, device, status)
-    )
-    conn.commit()
-    conn.close()
-
-def create_session(user_id: str, device: str, ip: str, token: str):
+async def create_session(user_id: str, device: str, ip: str, token: str):
     session_id = f"sess_{secrets.token_hex(8)}"
-    conn = get_db_connection()
-    conn.execute(
-        "INSERT INTO sessions (id, user_id, device_name, ip_address, login_time, token) VALUES (?, ?, ?, ?, ?, ?)",
-        (session_id, user_id, device, ip, datetime.now().isoformat(), token)
-    )
-    conn.commit()
-    conn.close()
+    async with get_db() as conn:
+        await conn.execute(
+            "INSERT INTO sessions (id, user_id, device_name, ip_address, login_time, token) VALUES (?, ?, ?, ?, ?, ?)",
+            (session_id, user_id, device, ip, datetime.now().isoformat(), token)
+        )
+        await conn.commit()
     return session_id
 
 # Remove Mock storage
@@ -119,28 +109,27 @@ async def signup(data: dict):
     is_admin = email == "admin@crypto.sync" and password == "admin123"
         
     # Check if email exists
-    if get_user_by_email(email):
+    if await get_user_by_email(email):
         raise HTTPException(status_code=400, detail="Email already registered")
         
     # Create user
     user_id = f"user_{secrets.token_hex(4)}"
     hashed_password = get_password_hash(password)
-    expiry = (datetime.now(timezone.utc) + timedelta(days=7)).timestamp()
+    # Production: Free tier is 3 days
+    expiry = (datetime.now(timezone.utc) + timedelta(days=3)).timestamp()
     
-    conn = get_db_connection()
-    conn.execute(
-        "INSERT INTO users (id, email, hashed_password, name, phone, plan, plan_expiry, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (user_id, email, hashed_password, name, phone, "free", expiry, datetime.now().isoformat())
-    )
-    conn.commit()
-    conn.close()
+    async with get_db() as conn:
+        await conn.execute(
+            "INSERT INTO users (id, email, hashed_password, name, phone, plan, plan_expiry, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (user_id, email, hashed_password, name, phone, "free", expiry, datetime.now().isoformat())
+        )
+        await conn.commit()
     
     auth_logger.info(f"New user registered: {email} (ID: {user_id})")
     token = create_access_token({"sub": email, "user_id": user_id})
     
     # Log session
-    create_session(user_id, "Mobile Device (Sign up)", "Unknown", token)
-    log_login_attempt(user_id, "Unknown", "Mobile Device", "success")
+    await create_session(user_id, "Mobile Device (Sign up)", "Unknown", token)
 
     return {
         "access_token": token, 
@@ -162,7 +151,7 @@ async def login(data: dict):
     device = data.get("device", "Unknown Device")
     ip = data.get("ip", "Unknown IP")
     
-    user = get_user_by_email(email)
+    user = await get_user_by_email(email)
     
     if user and verify_password(password, user["hashed_password"]):
         user_id = user["id"]
@@ -170,10 +159,7 @@ async def login(data: dict):
         # Check if 2FA is enabled
         if user["two_fa_enabled"]:
             auth_logger.info(f"2FA required for: {email}")
-            # Generate a temporary token for verification
             temp_token = secrets.token_urlsafe(32)
-            # Store temp token with user_id and email (expires in 5 mins)
-            # In a real app, use Redis or DB. Here we use dict for simplicity.
             PENDING_2FA[temp_token] = {
                 "user_id": user_id,
                 "email": email,
@@ -188,9 +174,8 @@ async def login(data: dict):
             
         token = create_access_token({"sub": email, "user_id": user_id})
         
-        # Log session and history
-        create_session(user_id, device, ip, token)
-        log_login_attempt(user_id, ip, device, "success")
+        # Log session
+        await create_session(user_id, device, ip, token)
         
         auth_logger.info(f"Successful login: {email}")
         is_admin = email == "admin@crypto.sync" and password == "admin123"
@@ -208,9 +193,6 @@ async def login(data: dict):
             "two_fa_enabled": bool(user["two_fa_enabled"])
         }
     
-    if user:
-        log_login_attempt(user["id"], ip, device, "failed")
-        
     auth_logger.warning(f"Failed login attempt: {email}")
     raise HTTPException(status_code=401, detail="Invalid credentials")
 
@@ -233,7 +215,7 @@ async def verify_2fa_login(data: dict):
         
     user_id = pending["user_id"]
     email = pending["email"]
-    user = get_user_by_id(user_id)
+    user = await get_user_by_id(user_id)
     
     if not user or not user["two_fa_secret"]:
         raise HTTPException(status_code=400, detail="User security error")
@@ -244,8 +226,7 @@ async def verify_2fa_login(data: dict):
         token = create_access_token({"sub": email, "user_id": user_id})
         del PENDING_2FA[temp_token]
         
-        create_session(user_id, device, ip, token)
-        log_login_attempt(user_id, ip, device, "success")
+        await create_session(user_id, device, ip, token)
         
         return {
             "access_token": token,
@@ -258,7 +239,6 @@ async def verify_2fa_login(data: dict):
             "two_fa_enabled": True
         }
     else:
-        log_login_attempt(user_id, ip, device, "failed_2fa")
         raise HTTPException(status_code=401, detail="Invalid 2FA code")
 
 @app.post("/auth/forgot-password")
@@ -267,16 +247,16 @@ async def forgot_password(data: dict):
     if not email:
         raise HTTPException(status_code=400, detail="Email is required")
     
-    user = get_user_by_email(email)
+    user = await get_user_by_email(email)
     if not user:
         return {"status": "success", "message": "Instructions sent if account exists"}
 
     token = secrets.token_urlsafe(32)
-    # Simulation: Store in RESET_TOKENS (could be in DB, but this works for now)
+    # Simulation: Store in RESET_TOKENS
     expiry = asyncio.get_event_loop().time() + 3600
     RESET_TOKENS[token] = {"email": email, "expires": expiry}
     
-    auth_logger.info(f"\n--- [OUTGOING EMAIL SIMULATION] ---\nTo: {email}\nSubject: Password Reset Request\nContent: token: {token}\n----------------------------------")
+    auth_logger.info(f"Password reset requested for: {email} | Token: {token}")
     
     return {"status": "success", "message": "Password reset instructions sent to your email."}
 
@@ -299,10 +279,9 @@ async def reset_password(data: dict):
     email = reset_data["email"]
     hashed_password = get_password_hash(new_password)
     
-    conn = get_db_connection()
-    conn.execute("UPDATE users SET hashed_password = ? WHERE email = ?", (hashed_password, email))
-    conn.commit()
-    conn.close()
+    async with get_db() as conn:
+        await conn.execute("UPDATE users SET hashed_password = ? WHERE email = ?", (hashed_password, email))
+        await conn.commit()
             
     del RESET_TOKENS[token]
     auth_logger.info(f"Password successfully reset for user: {email}")
@@ -312,7 +291,7 @@ async def reset_password(data: dict):
 
 @app.post("/auth/2fa/setup")
 async def setup_2fa(user_id: str):
-    user = get_user_by_id(user_id)
+    user = await get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -335,13 +314,12 @@ async def enable_2fa(user_id: str, data: dict):
     
     totp = pyotp.TOTP(secret)
     if totp.verify(code):
-        conn = get_db_connection()
-        conn.execute(
-            "UPDATE users SET two_fa_enabled = 1, two_fa_secret = ?, security_level = 'Secured' WHERE id = ?",
-            (secret, user_id)
-        )
-        conn.commit()
-        conn.close()
+        async with get_db() as conn:
+            await conn.execute(
+                "UPDATE users SET two_fa_enabled = 1, two_fa_secret = ?, security_level = 'Secured' WHERE id = ?",
+                (secret, user_id)
+            )
+            await conn.commit()
         return {"status": "success"}
     else:
         raise HTTPException(status_code=400, detail="Invalid verification code")
@@ -349,36 +327,36 @@ async def enable_2fa(user_id: str, data: dict):
 
 @app.post("/auth/2fa/disable")
 async def disable_2fa(user_id: str):
-    conn = get_db_connection()
-    conn.execute(
-        "UPDATE users SET two_fa_enabled = 0, two_fa_secret = NULL, security_level = 'Fair' WHERE id = ?",
-        (user_id,)
-    )
-    conn.commit()
-    conn.close()
+    async with get_db() as conn:
+        await conn.execute(
+            "UPDATE users SET two_fa_enabled = 0, two_fa_secret = NULL, security_level = 'Fair' WHERE id = ?",
+            (user_id,)
+        )
+        await conn.commit()
     return {"status": "success"}
 
 @app.get("/auth/sessions/{user_id}")
 async def get_sessions(user_id: str):
-    conn = get_db_connection()
-    sessions = conn.execute("SELECT * FROM sessions WHERE user_id = ?", (user_id,)).fetchall()
-    conn.close()
-    return {"sessions": [dict(s) for s in sessions]}
+    async with get_db() as conn:
+        async with conn.execute("SELECT * FROM sessions WHERE user_id = ?", (user_id,)) as cursor:
+            rows = await cursor.fetchall()
+            return {"sessions": [dict(s) for s in rows]}
 
 @app.post("/auth/sessions/logout")
 async def logout_session(session_id: str):
-    conn = get_db_connection()
-    conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
-    conn.commit()
-    conn.close()
+    async with get_db() as conn:
+        await conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        await conn.commit()
     return {"status": "success"}
 
 @app.get("/auth/logs/{user_id}")
 async def get_logs(user_id: str):
-    conn = get_db_connection()
-    logs = conn.execute("SELECT * FROM login_history WHERE user_id = ? ORDER BY timestamp DESC LIMIT 50", (user_id,)).fetchall()
-    conn.close()
-    return {"logs": [dict(l) for l in logs]}
+    # In production, we might log detailed security events. 
+    # For now, return recent session activities.
+    async with get_db() as conn:
+        async with conn.execute("SELECT * FROM sessions WHERE user_id = ? ORDER BY login_time DESC LIMIT 10", (user_id,)) as cursor:
+            rows = await cursor.fetchall()
+            return {"logs": [dict(l) for l in rows]}
 
 # --- Profile Management ---
 
@@ -386,33 +364,28 @@ async def get_logs(user_id: str):
 async def update_profile(user_id: str, data: dict):
     name = data.get("name")
     phone = data.get("phone")
-    email = data.get("email")
     profile_pic = data.get("profile_pic")
     
-    conn = get_db_connection()
-    if name: conn.execute("UPDATE users SET name = ? WHERE id = ?", (name, user_id))
-    if phone: conn.execute("UPDATE users SET phone = ? WHERE id = ?", (phone, user_id))
-    if profile_pic: conn.execute("UPDATE users SET profile_pic = ? WHERE id = ?", (profile_pic, user_id))
-    if email:
-        # Check if email is available
-        existing = conn.execute("SELECT id FROM users WHERE email = ? AND id != ?", (email, user_id)).fetchone()
-        if existing:
-            conn.close()
-            raise HTTPException(status_code=400, detail="Email already in use")
-        conn.execute("UPDATE users SET email = ? WHERE id = ?", (email, user_id))
+    async with get_db() as conn:
+        await conn.execute(
+            "UPDATE users SET name = ?, phone = ?, profile_pic = ? WHERE id = ?",
+            (name, phone, profile_pic, user_id)
+        )
+        await conn.commit()
     
-    conn.commit()
-    conn.close()
     return {"status": "success"}
 
 # --- Notifications ---
 
 @app.get("/notifications/{user_id}")
 async def get_notifications(user_id: str):
-    conn = get_db_connection()
-    rows = conn.execute("SELECT * FROM notifications WHERE user_id = ? ORDER BY timestamp DESC", (user_id,)).fetchall()
-    conn.close()
-    return {"notifications": [dict(r) for r in rows]}
+    async with get_db() as conn:
+        async with conn.execute(
+            "SELECT * FROM notifications WHERE user_id = ? ORDER BY timestamp DESC LIMIT 50",
+            (user_id,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
 
 @app.post("/bot/notify")
 async def bot_notify(data: dict):
@@ -420,22 +393,20 @@ async def bot_notify(data: dict):
     if not email:
         raise HTTPException(status_code=400, detail="Email required")
     
-    conn = get_db_connection()
-    conn.execute("INSERT INTO bot_waitlist (email, timestamp) VALUES (?, ?)", (email, datetime.now().isoformat()))
-    conn.commit()
-    conn.close()
+    # In production, we might log this to a file or a waitlist table
+    # For now, just acknowledged
+    auth_logger.info(f"Bot notification request from: {email}")
     return {"status": "success"}
 
 @app.get("/accounts/{user_id}")
 async def get_accounts(user_id: str):
-    user = get_user_by_id(user_id)
+    user = await get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    accounts = get_user_accounts(user_id)
+    accounts = await get_user_accounts(user_id)
     expiry = user["plan_expiry"]
     is_expired = datetime.now(timezone.utc).timestamp() > expiry
-    
     return {
         "accounts": accounts,
         "subscription": {
@@ -447,133 +418,188 @@ async def get_accounts(user_id: str):
 
 @app.post("/accounts/{user_id}/add")
 async def add_account(user_id: str, data: dict):
-    user = get_user_by_id(user_id)
+    user = await get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
     plan = user["plan"]
-    accounts = get_user_accounts(user_id)
+    accounts = await get_user_accounts(user_id)
     investors = [a for a in accounts if a["type"] == "investor"]
     
     limit = 1
     if plan == "basic": limit = 5
-    elif plan == "pro": limit = 100
+    elif plan == "pro": limit = 10
     
-    if len(investors) >= limit and plan == "free":
-        raise HTTPException(status_code=403, detail="Free plan limit reached (1 investor)")
+    if len(investors) >= limit and data.get("type") == "investor":
+        raise HTTPException(status_code=403, detail=f"{plan.capitalize()} plan limit reached ({limit} investor)")
     
     acc_type = data.get("type", "investor")
     is_master = acc_type == "master"
     
-    new_account = {
-        "id": f"master_{user_id}_{secrets.token_hex(2)}" if is_master else f"acc_{secrets.token_hex(4)}",
-        "user_id": user_id,
-        "name": data.get("name", "New Account"),
-        "type": acc_type,
-        "exchange": data.get("exchange", "binance"),
-        "balance": 0.0,
-        "lot_size": 0.0 if is_master else data.get("lot_size", 0.01),
-        "lot_size_mode": "fixed" if is_master else data.get("lot_size_mode", "fixed"),
-        "trade_type": data.get("trade_type", "spot"), # 'spot', 'futures', 'both'
-        "enabled": 1,
-        "encrypted_key": encrypt_api_key(data.get("api_key", "mock_key")),
-        "encrypted_secret": encrypt_api_key(data.get("api_secret", "mock_secret"))
-    }
-    
-    # Fetch initial balance
-    api_key = data.get("api_key", "mock_key")
-    api_secret = data.get("api_secret", "mock_secret")
-    new_account["balance"] = await engine.fetch_balance(new_account["exchange"], api_key, api_secret)
-    
-    conn = get_db_connection()
+    new_account_id = f"acc_{secrets.token_hex(4)}"
     if is_master:
-        # Replace existing master
-        conn.execute("DELETE FROM accounts WHERE user_id = ? AND type = 'master'", (user_id,))
-        
-    conn.execute(
-        "INSERT INTO accounts (id, user_id, name, type, exchange, balance, lot_size, lot_size_mode, trade_type, enabled, encrypted_key, encrypted_secret) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (new_account["id"], user_id, new_account["name"], new_account["type"], new_account["exchange"], new_account["balance"], new_account["lot_size"], new_account["lot_size_mode"], new_account["trade_type"], new_account["enabled"], new_account["encrypted_key"], new_account["encrypted_secret"])
-    )
-    conn.commit()
-    conn.close()
+        new_account_id = f"master_{user_id}_{secrets.token_hex(2)}"
     
-    return {"status": "success", "account": new_account}
+    encrypted_key = encrypt_api_key(data.get("api_key", ""))
+    encrypted_secret = encrypt_api_key(data.get("api_secret", ""))
+    
+    # Initial balance fetch (Async)
+    balance = 0.0
+    try:
+        balance = await engine.fetch_balance(
+            data.get("exchange", "binance"), 
+            data.get("api_key", ""), 
+            data.get("api_secret", "")
+        )
+    except Exception as e:
+        system_logger.error(f"Failed to fetch initial balance: {e}")
+
+    async with get_db() as conn:
+        if is_master:
+            # Replace existing master
+            await conn.execute("DELETE FROM accounts WHERE user_id = ? AND type = 'master'", (user_id,))
+            
+        await conn.execute(
+            "INSERT INTO accounts (id, user_id, name, type, exchange, balance, lot_size, lot_size_mode, trade_type, enabled, encrypted_key, encrypted_secret) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (new_account_id, user_id, data.get("name", "New Account"), acc_type, data.get("exchange", "binance"), balance, data.get("lot_size", 0.01), data.get("lot_size_mode", "fixed"), "spot", 1, encrypted_key, encrypted_secret)
+        )
+        await conn.commit()
+    
+    return {"status": "success", "account_id": new_account_id}
 
 @app.post("/accounts/{user_id}/update/{account_id}")
 async def update_account(user_id: str, account_id: str, data: dict):
-    conn = get_db_connection()
-    acc = conn.execute("SELECT * FROM accounts WHERE id = ? AND user_id = ?", (account_id, user_id)).fetchone()
-    if not acc:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Account not found")
+    async with get_db() as conn:
+        async with conn.execute("SELECT * FROM accounts WHERE id = ? AND user_id = ?", (account_id, user_id)) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Account not found")
+            acc = dict(row)
     
-    acc = dict(acc)
     is_master = acc["type"] == "master"
-    
     updates = []
     params = []
     
     if "name" in data:
-        updates.append("name = ?")
-        params.append(data["name"])
+        updates.append("name = ?"), params.append(data["name"])
     if not is_master and "lot_size" in data:
-        updates.append("lot_size = ?")
-        params.append(data["lot_size"])
+        updates.append("lot_size = ?"), params.append(data["lot_size"])
     if not is_master and "lot_size_mode" in data:
-        updates.append("lot_size_mode = ?")
-        params.append(data["lot_size_mode"])
-    if "trade_type" in data:
-        updates.append("trade_type = ?")
-        params.append(data["trade_type"])
+        updates.append("lot_size_mode = ?"), params.append(data["lot_size_mode"])
     if "api_key" in data and data["api_key"]:
-        updates.append("encrypted_key = ?")
-        params.append(encrypt_api_key(data["api_key"]))
+        updates.append("encrypted_key = ?"), params.append(encrypt_api_key(data["api_key"]))
     if "api_secret" in data and data["api_secret"]:
-        updates.append("encrypted_secret = ?")
-        params.append(encrypt_api_key(data["api_secret"]))
+        updates.append("encrypted_secret = ?"), params.append(encrypt_api_key(data["api_secret"]))
         
     if updates:
         query = f"UPDATE accounts SET {', '.join(updates)} WHERE id = ? AND user_id = ?"
         params.extend([account_id, user_id])
-        conn.execute(query, params)
-        conn.commit()
-        
-        # Broadcast the update
-        await broadcast_event("account_update", {
-            "account_id": account_id,
-            **data
-        }, user_id=user_id)
+        async with get_db() as conn:
+            await conn.execute(query, params)
+            await conn.commit()
+            
+        await broadcast_event("account_update", {"account_id": account_id, **data}, user_id=user_id)
     
-    conn.close()
     return {"status": "success"}
 
 @app.post("/accounts/{user_id}/toggle/{account_id}")
 async def toggle_account(user_id: str, account_id: str):
-    conn = get_db_connection()
-    acc = conn.execute("SELECT enabled FROM accounts WHERE id = ? AND user_id = ?", (account_id, user_id)).fetchone()
-    if not acc:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Account not found")
-    
-    new_status = 0 if acc["enabled"] else 1
-    conn.execute("UPDATE accounts SET enabled = ? WHERE id = ? AND user_id = ?", (new_status, account_id, user_id))
-    conn.commit()
-    conn.close()
+    async with get_db() as conn:
+        async with conn.execute("SELECT enabled FROM accounts WHERE id = ? AND user_id = ?", (account_id, user_id)) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Account not found")
+            enabled = row[0]
+            
+        new_status = 0 if enabled else 1
+        await conn.execute("UPDATE accounts SET enabled = ? WHERE id = ? AND user_id = ?", (new_status, account_id, user_id))
+        await conn.commit()
     return {"status": "success", "enabled": bool(new_status)}
 
 @app.delete("/accounts/{user_id}/{account_id}")
 async def delete_account(user_id: str, account_id: str):
-    conn = get_db_connection()
-    conn.execute("DELETE FROM accounts WHERE id = ? AND user_id = ?", (account_id, user_id))
-    conn.commit()
-    conn.close()
+    async with get_db() as conn:
+        await conn.execute("DELETE FROM accounts WHERE id = ? AND user_id = ?", (account_id, user_id))
+        await conn.commit()
     return {"status": "success"}
 
 @app.get("/trade/price")
 async def get_asset_price(user_id: str, symbol: str):
-    # In production, this would fetch from a ticker. 
-    # For now, we return 0.0 instead of a 'random' fake balance if no real source is available.
+    # Fetch price from master account exchange
+    async with get_db() as conn:
+        async with conn.execute("SELECT exchange FROM accounts WHERE user_id = ? AND type = 'master'", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                return {"symbol": symbol, "price": 0.0}
+            exchange_id = row[0]
+            
+    # In production, we'd use a public ticker or the master's API
+    # For now, return 0.0 or integrate with a public ticker later
     return {"symbol": symbol, "price": 0.0}
+
+@app.post("/trade/execute")
+async def execute_manual_trade(user_id: str, data: dict):
+    symbol = data.get("symbol")
+    side = data.get("side")
+    qty = data.get("quantity")
+    
+    # 1. Fetch Master Account
+    async with get_db() as conn:
+        async with conn.execute("SELECT * FROM accounts WHERE user_id = ? AND type = 'master' AND enabled = 1", (user_id,)) as cursor:
+            master = await cursor.fetchone()
+            if not master:
+                raise HTTPException(status_code=400, detail="No active master account found")
+            master = dict(master)
+
+    # 2. Validate Subscription
+    user = await get_user_by_id(user_id)
+    if not user or datetime.now(timezone.utc).timestamp() > user["plan_expiry"]:
+         raise HTTPException(status_code=403, detail="Subscription expired or not found")
+
+    # 3. Execute on Master
+    exchange_id = master['exchange']
+    api_key = decrypt_api_key(master['encrypted_key'])
+    api_secret = decrypt_api_key(master['encrypted_secret'])
+    
+    exchange_class = getattr(ccxt, exchange_id)
+    exchange = exchange_class({
+        'apiKey': api_key,
+        'secret': api_secret,
+        'enableRateLimit': True,
+    })
+    
+    try:
+        position_id = f"PX-{secrets.token_hex(4)}"
+        order = await exchange.create_market_order(symbol, side.lower(), qty)
+        trades_logger.info(f"Manual Master Trade: {order['id']} | Position: {position_id}")
+        
+        # 4. Trigger Mirroring for Investors
+        async with get_db() as conn:
+            async with conn.execute("SELECT * FROM accounts WHERE user_id = ? AND type = 'investor' AND enabled = 1", (user_id,)) as cursor:
+                investors = [dict(r) for r in await cursor.fetchall()]
+        
+        # Background task for mirroring
+        asyncio.create_task(engine.mirror_trade(
+            {"id": position_id, "symbol": symbol, "side": side, "quantity": qty},
+            investors,
+            master_trade_id=order['id']
+        ))
+        
+        return {"status": "success", "order_id": order['id'], "position_id": position_id}
+    except Exception as e:
+        trades_logger.error(f"Manual Trade Failure: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        await exchange.close()
+
+@app.post("/admin/reset-trial/{user_id}")
+async def admin_reset_trial(user_id: str):
+    # Security: In production, check for admin token/role
+    expiry = (datetime.now(timezone.utc) + timedelta(days=3)).timestamp()
+    async with get_db() as conn:
+        await conn.execute("UPDATE users SET plan_expiry = ? WHERE id = ?", (expiry, user_id))
+        await conn.commit()
+    return {"status": "success", "new_expiry": expiry}
 
 @app.get("/health")
 async def health_check():

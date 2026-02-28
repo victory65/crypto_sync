@@ -31,23 +31,32 @@ SECRET_KEY="your-super-secret-jwt-signing-key"
 ## 2. Frontend Deployment (Flutter)
 
 ### Step A: Connectivity Switch
-Before building your app, ensure **[api_config.dart](file:///c:/Users/VICTORY/Desktop/crypto_sync/lib/core/api_config.dart)** is set to production:
+Before building your app, ensure **[api_config.dart](file:///c:/Users/VICTORY/Desktop/crypto_sync/lib/core/api_config.dart)** is configured for your environment:
 ```dart
-static const bool isProduction = true;
-static const String prodHost = "atmosphere-forecasts-replaced-carol.trycloudflare.com"; 
-static const String prodPort = "443";
+// For Tunnel (Production/Remote)
+static const bool useTunnel = true;
+static const String tunnelHost = "your-url.trycloudflare.com"; 
+
+// For Hotspot/Local Wi-Fi
+static const bool useTunnel = false;
+static const bool useLocalNetwork = true;
+static const String localNetworkHost = "10.x.x.x"; 
 ```
 
-### Step C: Connection & Tunneling
+### Step B: Connection & Tunneling
 If you encounter a **502 Bad Gateway** or **Connection Refused** in your Flutter logs, it means your tunnel is active but cannot reach your Python process.
 
 1.  **Local Development Tunnel (e.g., Cloudflare)**:
     - **Command**: `cloudflared tunnel --url http://localhost:8000`
-    - **Update App**: Copy the generated `.trycloudflare.com` URL to `prodHost` in `lib/core/api_config.dart`.
+    - **Update App**: Set `useTunnel = true` and paste the generated `.trycloudflare.com` URL to `tunnelHost`.
     - **Firewall**: Ensure port 8000 is open in your OS firewall.
 
-2.  **Verification**: 
-    - Check the terminal output of `cloudflared`.
+2.  **USB Bridge (ADB Reverse)**:
+    - **Command**: `adb reverse tcp:8000 tcp:8000`
+    - **Update App**: Set `useLocalNetwork = false` and `localhostHost = "127.0.0.1"`.
+
+3.  **Verification**: 
+    - Check the terminal output of the tunnel or bridge.
     - Once connected, you will see the green **"ONLINE"** pill on your mobile dashboard.
 
 ### Step B: Build for Release

@@ -40,11 +40,11 @@ class SubscriptionScreen extends StatelessWidget {
               context,
               'Free',
               'Trial',
-              '7-Day Experience',
+              '3-Day Experience',
               [
                 '1 Master Account',
                 '1 Investor Account',
-                '7-Day Access only',
+                '3-Day Access only',
                 'Manual Execution'
               ],
               isSelected: subProvider.plan == SubscriptionPlan.free,

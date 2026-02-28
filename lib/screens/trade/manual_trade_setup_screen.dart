@@ -101,13 +101,12 @@ class _ManualTradeSetupScreenState extends State<ManualTradeSetupScreen> {
     setState(() => _isLoading = true);
     try {
       final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/simulate/trade?user_id=$userId'),
+        Uri.parse('${ApiConfig.baseUrl}/trade/execute?user_id=$userId'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'symbol': _selectedPair,
           'side': _side.name,
-          'amount': double.tryParse(_sizeController.text) ?? 1.0,
-          'price': _assetPrice ?? 0.0,
+          'quantity': double.tryParse(_sizeController.text) ?? 1.0,
           'trade_type': 'spot',
         }),
       );

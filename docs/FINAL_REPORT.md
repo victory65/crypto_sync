@@ -37,7 +37,11 @@
     - **Session Isolation**: Automated log-clearing protocol on both `connect` and `disconnect` for maximum multi-user privacy.
 
 ### 3. Monetization & Subscription System
-- **Tiered Plans**: Free (7-day trial), Basic ($19/mo), and Pro ($49/mo).
+- **Tiered Plans**: Free (3-day trial), Basic ($19/mo), and Pro ($49/mo).
+ Riverside is
+ Riverside is
+ Riverside is
+ Riverside is
 - **Backend Enforcement**: Limits on investor accounts are hard-enforced via API (`403 Forbidden`).
 - **Frontend Guard**: Automatic "Sync Paused" banners and upgrade modals when limits are detected.
 

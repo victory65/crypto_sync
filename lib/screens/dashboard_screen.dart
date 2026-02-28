@@ -53,6 +53,8 @@ class DashboardScreen extends StatelessWidget {
                 ],
               ),
             ),
+          if (subProvider.plan == SubscriptionPlan.free && !subProvider.isExpired)
+            const _TrialCountdownWidget(),
           Expanded(
             child: RefreshIndicator(
               onRefresh: () async {
@@ -897,6 +899,86 @@ class _SparklinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(CustomPainter oldDelegate) => false;
+}
+
+class _TrialCountdownWidget extends StatefulWidget {
+  const _TrialCountdownWidget();
+
+  @override
+  State<_TrialCountdownWidget> createState() => _TrialCountdownWidgetState();
+}
+
+class _TrialCountdownWidgetState extends State<_TrialCountdownWidget> {
+  late dynamic _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Stream.periodic(const Duration(seconds: 1)).listen((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sub = context.watch<SubscriptionProvider>();
+    final expiry = sub.expiry;
+    if (expiry == null) return const SizedBox.shrink();
+    
+    final remaining = expiry.difference(DateTime.now());
+    if (remaining.isNegative) return const SizedBox.shrink();
+
+    final hours = remaining.inHours;
+    final minutes = remaining.inMinutes % 60;
+    final seconds = remaining.inSeconds % 60;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.primary.withOpacity(0.15),
+            AppColors.primary.withOpacity(0.05),
+          ],
+        ),
+        border: Border(
+          bottom: BorderSide(color: AppColors.primary.withOpacity(0.1)),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.timer_outlined, size: 16, color: AppColors.primary).animate(onPlay: (p) => p.repeat()).shimmer(duration: 2.seconds),
+          const SizedBox(width: 12),
+          Text(
+            'FREE TRIAL ENDS IN: ',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary.withOpacity(0.7),
+              letterSpacing: 1.2,
+            ),
+          ),
+          Text(
+            '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
+            style: const TextStyle(
+              fontFamily: 'Courier',
+              fontWeight: FontWeight.w900,
+              fontSize: 14,
+              color: AppColors.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 

@@ -71,7 +71,7 @@ The Accounts tab allows you to connect your primary (Master) and secondary (Inve
 *   **Editable Master**: You can now update your primary execution account's API credentials at any time.
 *   **Mandatory Lot Sizing**: All investors must have a defined lot size using either **Fixed** (absolute amount) or **Percentage** (of balance) mode.
 *   **Live Status**: The Dashboard and Accounts tab provide real-time updates on your connectivity and membership level (e.g., ACTIVATED: PRO).
-*   **Free (7-Day Trial)**: Access the full system for 7 days with 1 investor account limit.
+*   **Free (3-Day Trial)**: Access the full system for 3 days with 1 investor account limit.
 *   **Basic**: Standard mirroring for up to 5 investor accounts (**$19/mo**).
 *   **Pro**: Professional grade with 10+ investors and intelligent per-investor scaling (**$49/mo**).
 *   **Expiration Management**: If a subscription expires, the sync engine automatically pauses (`Sync paused` status), and a dashboard banner provides immediate feedback.
@@ -85,11 +85,24 @@ The Accounts tab allows you to connect your primary (Master) and secondary (Inve
 
 The app is designed to work in any environment. Edit **[api_config.dart](file:///c:/Users/VICTORY/Desktop/crypto_sync/lib/core/api_config.dart)** to switch:
 
-1.  **Emulator**: Set `isProduction = false` and `useLocalNetwork = false`.
-2.  **Physical Device (Local)**: Set `isProduction = false`, `useLocalNetwork = true`, and enter your computer's IP in `localNetworkHost`.
-3.  **Deployment**: Set `isProduction = true` and enter your server URL in `prodHost`.
+1.  **USB Cable (Recommended)**: Best for stability.
+    -   Connect phone via USB + enable Debugging.
+    -   Run `adb reverse tcp:8000 tcp:8000`.
+    -   Set `useLocalNetwork = false` and `localhostHost = "127.0.0.1"`.
+2.  **Direct Hotspot (Wireless)**: Best for on-the-go.
+    -   Hotspot your PC from your phone.
+    -   Set `useLocalNetwork = true` and `localNetworkHost = "YOUR_PC_IP"`.
+3.  **Tunnel (Remote)**: Best for remote internet access.
+    -   Run `cloudflared tunnel --url http://localhost:8000`.
+    -   Set `useTunnel = true` and paste the URL into `tunnelHost`.
+
+---
 
 ## 🛠️ Developer Simulation Tools
+ Riverside is
+ Riverside is
+ Riverside is
+ Riverside is
 
 You can trigger real-time updates for demonstration purposes using the following endpoints (available while `backend/main.py` is running):
 
