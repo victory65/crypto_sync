@@ -104,10 +104,13 @@ class SyncProvider with ChangeNotifier {
     
     notifyListeners();
     
-    // Clear old logs for the new user session
+    // Clear old state for the new user session
     await clearLogs();
+    _currentPositions = {};
+    _persistPositions();
     
     _loadBalancesFromCache();
+    _loadPositionsFromCache();
     _initConnectivityListener();
     _establishConnection();
     fetchAccounts();
@@ -127,6 +130,7 @@ class SyncProvider with ChangeNotifier {
       _subProvider?.setIsAdmin(prefs.getBool(_isAdminKey) ?? false);
       _loadLogsFromCache();
       _loadBalancesFromCache();
+      _loadPositionsFromCache();
       _initConnectivityListener();
       _establishConnection();
       fetchAccounts();
@@ -226,6 +230,45 @@ class SyncProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> closePosition(Map<String, dynamic> position) async {
+    if (_lastUserId == null) return;
+    
+    final posId = position['id'];
+    debugPrint('Closing position: $posId');
+    _addLog('Trade', 'INITIATING CLOSE: ${position['side']} ${position['symbol']}');
+
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/trade/close?user_id=$_lastUserId'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "position_id": posId,
+          "symbol": position['symbol'],
+          "side": position['side'],
+          "quantity": position['master_size'] ?? position['masterSize'] ?? 0.0,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        _addLog('Trade', 'CLOSE SUCCESS: Position $posId liquidation mirrored', isSuccess: true);
+        // We don't remove it immediately; we wait for the WebSocket 'closed' event
+        // to stay synced with backend status, but we can optimistically mark it
+        if (_currentPositions.containsKey(posId)) {
+          _currentPositions[posId]['master_status'] = 'closing';
+          notifyListeners();
+        }
+      } else {
+        final errorDetail = jsonDecode(response.body)['detail'] ?? 'Unknown error';
+        _addLog('Trade', 'CLOSE FAILED: $errorDetail', isError: true);
+        throw Exception(errorDetail);
+      }
+    } catch (e) {
+      debugPrint('Error closing position: $e');
+      _addLog('Trade', 'Error during position close: $e', isError: true);
+      rethrow;
+    }
+  }
+
   void _onDisconnected() {
     debugPrint('WebSocket Disconnected');
     _status = SyncStatus.disconnected;
@@ -283,6 +326,7 @@ class SyncProvider with ChangeNotifier {
           final map = Map<String, dynamic>.from(acc as Map);
           // Safely cast boolean fields from potential SQLite integers
           map['enabled'] = map['enabled'] == 1 || map['enabled'] == true;
+          map['is_testnet'] = map['is_testnet'] == 1 || map['is_testnet'] == true;
           return map;
         }).toList();
         
@@ -314,6 +358,8 @@ class SyncProvider with ChangeNotifier {
     required double lotSize,
     required String lotSizeMode,
     required String tradeType,
+    String? passphrase,
+    bool isTestnet = false,
     String type = 'investor',
   }) async {
     if (_lastUserId == null) return false;
@@ -333,6 +379,8 @@ class SyncProvider with ChangeNotifier {
           'lot_size': lotSize,
           'lot_size_mode': lotSizeMode,
           'trade_type': tradeType,
+          'passphrase': passphrase,
+          'is_testnet': isTestnet,
           'type': type,
         }),
       ).timeout(const Duration(seconds: 10));
@@ -360,6 +408,8 @@ class SyncProvider with ChangeNotifier {
     double? lotSize,
     String? lotSizeMode,
     String? tradeType,
+    String? passphrase,
+    bool? isTestnet,
   }) async {
     if (_lastUserId == null) return false;
 
@@ -371,6 +421,8 @@ class SyncProvider with ChangeNotifier {
       if (lotSize != null) body['lot_size'] = lotSize;
       if (lotSizeMode != null) body['lot_size_mode'] = lotSizeMode;
       if (tradeType != null) body['trade_type'] = tradeType;
+      if (passphrase != null) body['passphrase'] = passphrase;
+      if (isTestnet != null) body['is_testnet'] = isTestnet;
 
       final response = await http.post(
         Uri.parse("${ApiConfig.baseUrl}/accounts/$_lastUserId/update/$accountId"),
@@ -459,12 +511,13 @@ class SyncProvider with ChangeNotifier {
     _status = SyncStatus.connected;
     _isConnecting = false;
     try {
-      final decoded = await compute(jsonDecode, message);
-      if (decoded is! Map<String, dynamic>) {
+      final decodedData = await compute(jsonDecode, message);
+      if (decodedData is! Map) {
         debugPrint('Unexpected WebSocket message format: $message');
         return;
       }
 
+      final decoded = Map<String, dynamic>.from(decodedData);
       final event = decoded['event'];
       final payload = decoded['payload'];
 
@@ -506,6 +559,28 @@ class SyncProvider with ChangeNotifier {
     _addLog('Sync', 'Balance update received');
   }
 
+  void _persistPositions() {
+    try {
+      final box = Hive.box('protocol_logs');
+      box.put('cached_positions', _currentPositions);
+    } catch (e) {
+      debugPrint('Error persisting positions: $e');
+    }
+  }
+
+  void _loadPositionsFromCache() {
+    try {
+      final box = Hive.box('protocol_logs');
+      final cached = box.get('cached_positions');
+      if (cached != null) {
+        _currentPositions = Map<String, dynamic>.from(cached as Map);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error loading cached positions: $e');
+    }
+  }
+
   void _persistBalances() {
     try {
       final box = Hive.box('protocol_logs'); // Reuse or create a new box if preferred
@@ -544,9 +619,21 @@ class SyncProvider with ChangeNotifier {
         "symbol": payload['symbol'] ?? "Unknown",
         "side": payload['side'] ?? "Unknown",
         "master_status": payload['master_status'] ?? "detected",
-        "investors": {}
+        "master_size": payload['quantity'] ?? payload['master_size'] ?? 0.0,
+        "total_investors": payload['total_investors'] ?? 0,
+        "investors": <String, dynamic>{}
       };
       _addLog('Trade', 'DETECTED: Master ${payload['side']} ${payload['symbol']}', isSuccess: true);
+    } else {
+      // Merge updates
+      final existing = _currentPositions[posId] as Map<String, dynamic>;
+      payload.forEach((key, value) {
+        if (key == 'quantity') {
+          existing['master_size'] = value;
+        } else {
+          existing[key] = value;
+        }
+      });
     }
     
     // Check for status changes (filled, closed, etc.)
@@ -560,6 +647,7 @@ class SyncProvider with ChangeNotifier {
       }
       _addLog('Trade', actionMessage);
     }
+    _persistPositions();
   }
 
   void _updateInvestorExecution(Map<String, dynamic> payload) {
@@ -567,9 +655,10 @@ class SyncProvider with ChangeNotifier {
     final investorId = payload['investor_id'] ?? payload['account_id'];
     
     if (posId != null && _currentPositions.containsKey(posId)) {
-      final investors = _currentPositions[posId]['investors'] as Map<String, dynamic>;
+      final investors = Map<String, dynamic>.from(_currentPositions[posId]['investors'] as Map);
       final symbol = _currentPositions[posId]['symbol'];
       investors[investorId] = payload;
+      _currentPositions[posId]['investors'] = investors;
       
       final status = payload['status'].toString().toUpperCase();
       _addLog('Execution', '$status: Mirror on Investor $investorId for $symbol', 
@@ -577,6 +666,7 @@ class SyncProvider with ChangeNotifier {
         isError: status == 'FAILED'
       );
     }
+    _persistPositions();
   }
 
   void addCustomLog(String title, String message, {bool isError = false, bool isSuccess = false}) {
@@ -586,11 +676,12 @@ class SyncProvider with ChangeNotifier {
 
   Future<void> clearLogs() async {
     _logs = [];
+    _currentPositions = {};
     try {
       final box = Hive.box('protocol_logs');
       await box.clear();
     } catch (e) {
-      debugPrint('Error clearing logs: $e');
+      debugPrint('Error clearing logs/positions: $e');
     }
     notifyListeners();
   }

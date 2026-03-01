@@ -164,7 +164,8 @@ final _router = GoRouter(
     GoRoute(
       path: '/auth/verify-2fa',
       builder: (context, state) {
-        final extra = state.extra as Map<String, dynamic>;
+        final extraData = state.extra;
+        final extra = Map<String, dynamic>.from(extraData is Map ? extraData : {});
         return Verify2FALoginScreen(
           tempToken: extra['temp_token'],
           userId: extra['user_id'],

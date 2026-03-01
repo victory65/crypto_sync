@@ -7,6 +7,7 @@ class ConnectivityService with ChangeNotifier {
   bool get isOnline => _isOnline;
 
   late StreamSubscription<List<ConnectivityResult>> _subscription;
+  bool _isDisposed = false;
 
   ConnectivityService() {
     _checkInitialConnectivity();
@@ -31,8 +32,10 @@ class ConnectivityService with ChangeNotifier {
     if (_isOnline != hasConnection) {
       // Debounce the change slightly to prevent flickering during rapid state transitions
       Future.delayed(const Duration(milliseconds: 500), () {
+        if (_isDisposed) return;
         // Re-check after delay to ensure the state is stable
         Connectivity().checkConnectivity().then((currentResults) {
+          if (_isDisposed) return;
           final bool stableHasConnection = currentResults.isNotEmpty && !currentResults.contains(ConnectivityResult.none);
           if (_isOnline != stableHasConnection) {
             _isOnline = stableHasConnection;
@@ -45,6 +48,7 @@ class ConnectivityService with ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _subscription.cancel();
     super.dispose();
   }

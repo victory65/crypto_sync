@@ -101,13 +101,21 @@ class _InvestorDetailScreenState extends State<InvestorDetailScreen> {
                         color: AppColors.success,
                         small: true,
                       ),
+                      if (investor['is_testnet'] == true) ...[
+                        const SizedBox(height: 4),
+                        StatusBadge(
+                          label: 'TESTNET', 
+                          color: Colors.orange,
+                          small: true,
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 32),
-            _buildBalanceCard(context, exchangeName, balance, syncProvider.currencySymbol),
+            _buildBalanceCard(context, investor, balance, syncProvider.currencySymbol),
             const SizedBox(height: 32),
             _buildSettingsList(context, investor, syncProvider),
             const SizedBox(height: 32),
@@ -142,7 +150,8 @@ class _InvestorDetailScreenState extends State<InvestorDetailScreen> {
     }
   }
 
-  Widget _buildBalanceCard(BuildContext context, String exchange, double balance, String currency) {
+  Widget _buildBalanceCard(BuildContext context, Map<String, dynamic> investor, double balance, String currency) {
+    final exchange = investor['exchange']?.toString() ?? 'Exchange';
     return AppCard(
       padding: const EdgeInsets.all(24),
       color: AppColors.primary.withOpacity(0.05),
@@ -154,7 +163,10 @@ class _InvestorDetailScreenState extends State<InvestorDetailScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Available Balance', style: TextStyle(color: AppColors.primary.withOpacity(0.7), fontWeight: FontWeight.w600)),
-              StatusBadge(label: exchange.toUpperCase(), color: AppColors.primary),
+              StatusBadge(
+                label: investor['is_testnet'] == true ? '${exchange.toUpperCase()} TESTNET' : exchange.toUpperCase(), 
+                color: investor['is_testnet'] == true ? Colors.orange : AppColors.primary
+              ),
             ],
           ),
           const SizedBox(height: 12),

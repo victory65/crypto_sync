@@ -5,10 +5,11 @@ import asyncio
 import secrets
 import uvicorn
 from datetime import datetime, timedelta, timezone
+import ccxt.async_support as ccxt
 
 from core.security import decode_access_token, verify_password, create_access_token, get_password_hash, encrypt_api_key, decrypt_api_key
 from core.websocket import manager, broadcast_event
-from core.logger import system_logger, auth_logger
+from core.logger import system_logger, auth_logger, trades_logger
 from engine.trade_engine import engine
 from core.database import get_db, init_db
 import pyotp
@@ -37,6 +38,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Supported exchanges
+SUPPORTED_EXCHANGES = [
+    'binance', 'binanceus', 'bybit', 'bitget', 'okx', 'gateio', 'gate', 'mexc',
+    'kraken', 'phemex', 'deribit', 'bitmex', 'coinbase', 'kucoin'
+]
+
+def validate_exchange(exchange_id: str) -> bool:
+    """Validate if exchange is supported."""
+    if not exchange_id:
+        return False
+    return exchange_id.lower() in SUPPORTED_EXCHANGES
+
 # --- WebSocket Endpoint ---
 
 @app.websocket("/ws/user/{user_id}")
@@ -48,6 +61,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, token: Optional
         return
 
     await manager.connect(user_id, websocket)
+    # Refresh balances on connection
+    asyncio.create_task(engine.sync_user_balances(user_id))
     try:
         while True:
             # Maintain connection and listen for heartbeats
@@ -60,8 +75,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, token: Optional
     except Exception as e:
         system_logger.error(f"WebSocket error for {user_id}: {e}")
         manager.disconnect(user_id, websocket)
-
-# --- REST Endpoints (Auth & Simulation) ---
 
 # --- Database Helpers (Async) ---
 
@@ -93,8 +106,7 @@ async def create_session(user_id: str, device: str, ip: str, token: str):
         await conn.commit()
     return session_id
 
-# Remove Mock storage
-# USERS_DB = {}
+# --- Auth Endpoints ---
 
 @app.post("/auth/signup")
 async def signup(data: dict):
@@ -105,6 +117,9 @@ async def signup(data: dict):
     
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email and password required")
+    
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     
     is_admin = email == "admin@crypto.sync" and password == "admin123"
         
@@ -142,7 +157,7 @@ async def signup(data: dict):
         "is_admin": is_admin
     }
 
-RESET_TOKENS = {} # Stores {token: {"email": email, "expires": timestamp}}
+RESET_TOKENS = {}
 
 @app.post("/auth/login")
 async def login(data: dict):
@@ -151,13 +166,16 @@ async def login(data: dict):
     device = data.get("device", "Unknown Device")
     ip = data.get("ip", "Unknown IP")
     
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email and password required")
+    
     user = await get_user_by_email(email)
     
     if user and verify_password(password, user["hashed_password"]):
         user_id = user["id"]
         
         # Check if 2FA is enabled
-        if user["two_fa_enabled"]:
+        if user.get("two_fa_enabled"):
             auth_logger.info(f"2FA required for: {email}")
             temp_token = secrets.token_urlsafe(32)
             PENDING_2FA[temp_token] = {
@@ -190,13 +208,13 @@ async def login(data: dict):
             "phone": user.get("phone"),
             "profile_pic": user.get("profile_pic"),
             "is_admin": is_admin,
-            "two_fa_enabled": bool(user["two_fa_enabled"])
+            "two_fa_enabled": bool(user.get("two_fa_enabled"))
         }
     
     auth_logger.warning(f"Failed login attempt: {email}")
     raise HTTPException(status_code=401, detail="Invalid credentials")
 
-PENDING_2FA = {} # Stores {temp_token: {"user_id": uid, "email": email, "expires": ts}}
+PENDING_2FA = {}
 
 @app.post("/auth/login/verify-2fa")
 async def verify_2fa_login(data: dict):
@@ -210,19 +228,19 @@ async def verify_2fa_login(data: dict):
         
     pending = PENDING_2FA.get(temp_token)
     if not pending or datetime.now().timestamp() > pending["expires"]:
-        if temp_token in PENDING_2FA: del PENDING_2FA[temp_token]
+        if temp_token in PENDING_2FA:
+            del PENDING_2FA[temp_token]
         raise HTTPException(status_code=400, detail="Expired or invalid session")
         
     user_id = pending["user_id"]
     email = pending["email"]
     user = await get_user_by_id(user_id)
     
-    if not user or not user["two_fa_secret"]:
+    if not user or not user.get("two_fa_secret"):
         raise HTTPException(status_code=400, detail="User security error")
         
     totp = pyotp.TOTP(user["two_fa_secret"])
     if totp.verify(code):
-        # Verification successful
         token = create_access_token({"sub": email, "user_id": user_id})
         del PENDING_2FA[temp_token]
         
@@ -252,7 +270,6 @@ async def forgot_password(data: dict):
         return {"status": "success", "message": "Instructions sent if account exists"}
 
     token = secrets.token_urlsafe(32)
-    # Simulation: Store in RESET_TOKENS
     expiry = asyncio.get_event_loop().time() + 3600
     RESET_TOKENS[token] = {"email": email, "expires": expiry}
     
@@ -299,7 +316,6 @@ async def setup_2fa(user_id: str):
     totp = pyotp.TOTP(secret)
     provisioning_url = totp.provisioning_uri(name=user["email"], issuer_name="Crypto Sync")
     
-    # Generate QR Code
     img = qrcode.make(provisioning_url)
     img_byte_arr = io.BytesIO()
     img.save(img_byte_arr, format='PNG')
@@ -312,6 +328,9 @@ async def enable_2fa(user_id: str, data: dict):
     secret = data.get("secret")
     code = data.get("code")
     
+    if not secret or not code:
+        raise HTTPException(status_code=400, detail="Secret and code required")
+    
     totp = pyotp.TOTP(secret)
     if totp.verify(code):
         async with get_db() as conn:
@@ -323,7 +342,6 @@ async def enable_2fa(user_id: str, data: dict):
         return {"status": "success"}
     else:
         raise HTTPException(status_code=400, detail="Invalid verification code")
-    
 
 @app.post("/auth/2fa/disable")
 async def disable_2fa(user_id: str):
@@ -351,8 +369,6 @@ async def logout_session(session_id: str):
 
 @app.get("/auth/logs/{user_id}")
 async def get_logs(user_id: str):
-    # In production, we might log detailed security events. 
-    # For now, return recent session activities.
     async with get_db() as conn:
         async with conn.execute("SELECT * FROM sessions WHERE user_id = ? ORDER BY login_time DESC LIMIT 10", (user_id,)) as cursor:
             rows = await cursor.fetchall()
@@ -393,10 +409,10 @@ async def bot_notify(data: dict):
     if not email:
         raise HTTPException(status_code=400, detail="Email required")
     
-    # In production, we might log this to a file or a waitlist table
-    # For now, just acknowledged
     auth_logger.info(f"Bot notification request from: {email}")
     return {"status": "success"}
+
+# --- Account Management ---
 
 @app.get("/accounts/{user_id}")
 async def get_accounts(user_id: str):
@@ -404,13 +420,17 @@ async def get_accounts(user_id: str):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # Refresh balances on dashboard load/refresh
+    asyncio.create_task(engine.sync_user_balances(user_id))
+    
     accounts = await get_user_accounts(user_id)
-    expiry = user["plan_expiry"]
-    is_expired = datetime.now(timezone.utc).timestamp() > expiry
+    expiry = user.get("plan_expiry")
+    is_expired = expiry and datetime.now(timezone.utc).timestamp() > expiry
+    
     return {
         "accounts": accounts,
         "subscription": {
-            "plan": user["plan"],
+            "plan": user.get("plan", "free"),
             "expiry": expiry,
             "is_expired": is_expired
         }
@@ -422,50 +442,73 @@ async def add_account(user_id: str, data: dict):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    plan = user["plan"]
+    plan = user.get("plan", "free")
     accounts = await get_user_accounts(user_id)
-    investors = [a for a in accounts if a["type"] == "investor"]
+    investors = [a for a in accounts if a.get("type") == "investor"]
     
     limit = 1
-    if plan == "basic": limit = 5
-    elif plan == "pro": limit = 10
-    
-    if len(investors) >= limit and data.get("type") == "investor":
-        raise HTTPException(status_code=403, detail=f"{plan.capitalize()} plan limit reached ({limit} investor)")
+    if plan == "basic":
+        limit = 5
+    elif plan == "pro":
+        limit = 10
     
     acc_type = data.get("type", "investor")
+    
+    # Admin bypass for limits and expiry
+    is_admin = user.get("email") == "admin@crypto.sync"
+    
+    # Check expiry for normal users
+    expiry = user.get("plan_expiry")
+    if not is_admin and expiry and datetime.now(timezone.utc).timestamp() > expiry:
+        raise HTTPException(status_code=403, detail="Subscription expired. Please renew to add accounts.")
+    
+    if not is_admin and len(investors) >= limit and acc_type == "investor":
+        raise HTTPException(status_code=403, detail=f"{plan.capitalize()} plan limit reached ({limit} investors)")
+    
     is_master = acc_type == "master"
     
     new_account_id = f"acc_{secrets.token_hex(4)}"
     if is_master:
         new_account_id = f"master_{user_id}_{secrets.token_hex(2)}"
     
-    encrypted_key = encrypt_api_key(data.get("api_key", ""))
-    encrypted_secret = encrypt_api_key(data.get("api_secret", ""))
+    api_key = data.get("api_key", "").strip()
+    api_secret = data.get("api_secret", "").strip()
+    passphrase = data.get("passphrase", "").strip()
+    is_testnet = bool(data.get("is_testnet", 0))
     
-    # Initial balance fetch (Async)
+    encrypted_key = encrypt_api_key(api_key)
+    encrypted_secret = encrypt_api_key(api_secret)
+    encrypted_passphrase = encrypt_api_key(passphrase) if passphrase else None
+    
+    exchange = data.get("exchange", "binance")
+    
+    # Validate exchange
+    if not validate_exchange(exchange):
+        raise HTTPException(status_code=400, detail=f"Unsupported exchange: {exchange}")
+    
+    # Initial balance fetch
     balance = 0.0
-    try:
-        balance = await engine.fetch_balance(
-            data.get("exchange", "binance"), 
-            data.get("api_key", ""), 
-            data.get("api_secret", "")
-        )
-    except Exception as e:
-        system_logger.error(f"Failed to fetch initial balance: {e}")
-
+    if api_key and api_secret:
+        try:
+            balance = await engine.fetch_balance(exchange, api_key, api_secret, passphrase=passphrase, is_testnet=is_testnet)
+        except Exception as e:
+            system_logger.error(f"Failed to fetch initial balance: {e}")
+    
     async with get_db() as conn:
         if is_master:
-            # Replace existing master
             await conn.execute("DELETE FROM accounts WHERE user_id = ? AND type = 'master'", (user_id,))
             
         await conn.execute(
-            "INSERT INTO accounts (id, user_id, name, type, exchange, balance, lot_size, lot_size_mode, trade_type, enabled, encrypted_key, encrypted_secret) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (new_account_id, user_id, data.get("name", "New Account"), acc_type, data.get("exchange", "binance"), balance, data.get("lot_size", 0.01), data.get("lot_size_mode", "fixed"), "spot", 1, encrypted_key, encrypted_secret)
+            """INSERT INTO accounts 
+                (id, user_id, name, type, exchange, balance, lot_size, lot_size_mode, trade_type, enabled, is_testnet, encrypted_key, encrypted_secret, encrypted_passphrase) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (new_account_id, user_id, data.get("name", "New Account"), acc_type, exchange, 
+             balance, data.get("lot_size", 0.01), data.get("lot_size_mode", "fixed"), 
+             "spot", 1, 1 if is_testnet else 0, encrypted_key, encrypted_secret, encrypted_passphrase)
         )
         await conn.commit()
     
-    return {"status": "success", "account_id": new_account_id}
+    return {"status": "success", "account_id": new_account_id, "balance": balance}
 
 @app.post("/accounts/{user_id}/update/{account_id}")
 async def update_account(user_id: str, account_id: str, data: dict):
@@ -476,20 +519,34 @@ async def update_account(user_id: str, account_id: str, data: dict):
                 raise HTTPException(status_code=404, detail="Account not found")
             acc = dict(row)
     
-    is_master = acc["type"] == "master"
+    is_master = acc.get("type") == "master"
     updates = []
     params = []
     
     if "name" in data:
-        updates.append("name = ?"), params.append(data["name"])
+        updates.append("name = ?")
+        params.append(data["name"])
     if not is_master and "lot_size" in data:
-        updates.append("lot_size = ?"), params.append(data["lot_size"])
+        updates.append("lot_size = ?")
+        params.append(data["lot_size"])
     if not is_master and "lot_size_mode" in data:
-        updates.append("lot_size_mode = ?"), params.append(data["lot_size_mode"])
+        updates.append("lot_size_mode = ?")
+        params.append(data["lot_size_mode"])
     if "api_key" in data and data["api_key"]:
-        updates.append("encrypted_key = ?"), params.append(encrypt_api_key(data["api_key"]))
+        updates.append("encrypted_key = ?")
+        params.append(encrypt_api_key(data["api_key"].strip()))
     if "api_secret" in data and data["api_secret"]:
-        updates.append("encrypted_secret = ?"), params.append(encrypt_api_key(data["api_secret"]))
+        updates.append("encrypted_secret = ?")
+        params.append(encrypt_api_key(data["api_secret"].strip()))
+    if "passphrase" in data and data["passphrase"]:
+        updates.append("encrypted_passphrase = ?")
+        params.append(encrypt_api_key(data["passphrase"].strip()))
+    if "is_testnet" in data:
+        updates.append("is_testnet = ?")
+        params.append(1 if data["is_testnet"] else 0)
+    if "trade_type" in data:
+        updates.append("trade_type = ?")
+        params.append(data["trade_type"])
         
     if updates:
         query = f"UPDATE accounts SET {', '.join(updates)} WHERE id = ? AND user_id = ?"
@@ -517,94 +574,317 @@ async def toggle_account(user_id: str, account_id: str):
     return {"status": "success", "enabled": bool(new_status)}
 
 @app.delete("/accounts/{user_id}/{account_id}")
+@app.delete("/accounts/{user_id}/delete/{account_id}")
 async def delete_account(user_id: str, account_id: str):
     async with get_db() as conn:
+        # First delete related trades
+        await conn.execute("DELETE FROM trades WHERE account_id = ?", (account_id,))
+        # Then delete the account
         await conn.execute("DELETE FROM accounts WHERE id = ? AND user_id = ?", (account_id, user_id))
         await conn.commit()
     return {"status": "success"}
 
+# --- Trade Endpoints ---
+
 @app.get("/trade/price")
 async def get_asset_price(user_id: str, symbol: str):
-    # Fetch price from master account exchange
     async with get_db() as conn:
         async with conn.execute("SELECT exchange FROM accounts WHERE user_id = ? AND type = 'master'", (user_id,)) as cursor:
             row = await cursor.fetchone()
             if not row:
                 return {"symbol": symbol, "price": 0.0}
             exchange_id = row[0]
-            
-    # In production, we'd use a public ticker or the master's API
-    # For now, return 0.0 or integrate with a public ticker later
+    
+    # Try to fetch real price
+    try:
+        if validate_exchange(exchange_id):
+            exchange_class = getattr(ccxt, exchange_id.lower())
+            exchange = exchange_class({'enableRateLimit': True})
+            ticker = await exchange.fetch_ticker(symbol)
+            await exchange.close()
+            return {"symbol": symbol, "price": ticker.get('last', 0.0)}
+    except Exception as e:
+        system_logger.error(f"Failed to fetch price: {e}")
+    
     return {"symbol": symbol, "price": 0.0}
 
 @app.post("/trade/execute")
 async def execute_manual_trade(user_id: str, data: dict):
+    """
+    Execute a manual trade on the master account and mirror to investors.
+    """
     symbol = data.get("symbol")
     side = data.get("side")
     qty = data.get("quantity")
     
+    # Validate input
+    if not symbol or not side or qty is None:
+        raise HTTPException(status_code=400, detail="Symbol, side, and quantity are required")
+    
+    try:
+        qty = float(qty)
+        if qty <= 0:
+            raise HTTPException(status_code=400, detail="Quantity must be positive")
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid quantity")
+    
+    side = side.lower()
+    if side not in ['buy', 'sell']:
+        raise HTTPException(status_code=400, detail="Side must be 'buy' or 'sell'")
+    
     # 1. Fetch Master Account
     async with get_db() as conn:
-        async with conn.execute("SELECT * FROM accounts WHERE user_id = ? AND type = 'master' AND enabled = 1", (user_id,)) as cursor:
+        async with conn.execute(
+            "SELECT * FROM accounts WHERE user_id = ? AND type = 'master' AND enabled = 1",
+            (user_id,)
+        ) as cursor:
             master = await cursor.fetchone()
             if not master:
                 raise HTTPException(status_code=400, detail="No active master account found")
             master = dict(master)
-
+    
     # 2. Validate Subscription
     user = await get_user_by_id(user_id)
-    if not user or datetime.now(timezone.utc).timestamp() > user["plan_expiry"]:
-         raise HTTPException(status_code=403, detail="Subscription expired or not found")
-
-    # 3. Execute on Master
-    exchange_id = master['exchange']
-    api_key = decrypt_api_key(master['encrypted_key'])
-    api_secret = decrypt_api_key(master['encrypted_secret'])
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
     
-    exchange_class = getattr(ccxt, exchange_id)
-    exchange = exchange_class({
-        'apiKey': api_key,
-        'secret': api_secret,
-        'enableRateLimit': True,
-    })
+    # Admin bypass for expiry
+    is_admin = user.get("email") == "admin@crypto.sync"
+    plan_expiry = user.get("plan_expiry")
+    if not is_admin and plan_expiry and datetime.now(timezone.utc).timestamp() > plan_expiry:
+        raise HTTPException(status_code=403, detail="Subscription expired")
     
+    # 3. Validate Master Exchange
+    exchange_id = master.get('exchange')
+    if not validate_exchange(exchange_id):
+        raise HTTPException(status_code=400, detail=f"Invalid or unsupported exchange: {exchange_id}")
+    
+    # 4. Decrypt API credentials
+    encrypted_key = master.get('encrypted_key')
+    encrypted_secret = master.get('encrypted_secret')
+    
+    if not encrypted_key or not encrypted_secret:
+        raise HTTPException(status_code=400, detail="Master account missing API credentials")
+    
+    api_key = decrypt_api_key(encrypted_key).strip()
+    api_secret = decrypt_api_key(encrypted_secret).strip()
+    
+    passphrase = None
+    encrypted_passphrase = master.get('encrypted_passphrase')
+    if encrypted_passphrase:
+        passphrase = decrypt_api_key(encrypted_passphrase).strip()
+    
+    if not api_key or not api_secret:
+        raise HTTPException(status_code=400, detail="Failed to decrypt API credentials")
+    
+    # 5. Execute on Master
+    exchange = None
     try:
-        position_id = f"PX-{secrets.token_hex(4)}"
-        order = await exchange.create_market_order(symbol, side.lower(), qty)
-        trades_logger.info(f"Manual Master Trade: {order['id']} | Position: {position_id}")
+        exchange_class = getattr(ccxt, exchange_id.lower())
+        exchange_options = {
+            'apiKey': api_key,
+            'secret': api_secret,
+            'password': passphrase,
+            'enableRateLimit': True,
+            'options': {
+                'defaultType': master.get('trade_type', 'spot'),
+            }
+        }
         
-        # 4. Trigger Mirroring for Investors
+        if exchange_id.lower() in ['binance', 'binanceus']:
+            exchange_options['adjustForTimeDifference'] = True
+            exchange_options['options']['recvWindow'] = 60000  # Max 60s window
+            exchange_options['options']['adjustForTimeDifference'] = True
+            
+        exchange = exchange_class(exchange_options)
+        
+        is_testnet = bool(master.get('is_testnet', 0))
+        if is_testnet:
+            exchange.set_sandbox_mode(True)
+        
+        position_id = f"PX-{secrets.token_hex(4)}"
+        
+        trades_logger.info(f"Executing manual trade: {symbol} {side} {qty} for user {user_id}")
+        
+        order = await exchange.create_market_order(symbol, side, qty)
+        
+        trades_logger.info(f"Manual Master Trade successful: {order.get('id')} | Position: {position_id}")
+        
+        # 6. Fetch Investors
         async with get_db() as conn:
-            async with conn.execute("SELECT * FROM accounts WHERE user_id = ? AND type = 'investor' AND enabled = 1", (user_id,)) as cursor:
+            async with conn.execute(
+                "SELECT * FROM accounts WHERE user_id = ? AND type = 'investor' AND enabled = 1",
+                (user_id,)
+            ) as cursor:
                 investors = [dict(r) for r in await cursor.fetchall()]
         
-        # Background task for mirroring
-        asyncio.create_task(engine.mirror_trade(
-            {"id": position_id, "symbol": symbol, "side": side, "quantity": qty},
-            investors,
-            master_trade_id=order['id']
-        ))
+        # 7. Trigger Mirroring (if investors exist)
+        if investors:
+            trades_logger.info(f"Mirroring to {len(investors)} investors")
+            
+            # Create background task for mirroring
+            asyncio.create_task(engine.mirror_trade(
+                {"symbol": symbol, "side": side, "quantity": qty},
+                investors,
+                master_trade_id=order.get('id')
+            ))
+        else:
+            trades_logger.info("No active investors to mirror to")
         
-        return {"status": "success", "order_id": order['id'], "position_id": position_id}
+        # 8. Refresh All Balances (Master + Investors) after trade
+        asyncio.create_task(engine.sync_user_balances(user_id))
+        
+        return {
+            "status": "success",
+            "order_id": order.get('id'),
+            "position_id": position_id,
+            "mirrored_to": len(investors)
+        }
+        
+    except ccxt.NetworkError as e:
+        trades_logger.error(f"Network error during trade: {e}")
+        raise HTTPException(status_code=503, detail=f"Network error: {str(e)}")
+    except ccxt.ExchangeError as e:
+        trades_logger.error(f"Exchange error during trade: {e}")
+        raise HTTPException(status_code=400, detail=f"Exchange error: {str(e)}")
     except Exception as e:
         trades_logger.error(f"Manual Trade Failure: {e}")
+        raise HTTPException(status_code=500, detail=f"Trade execution failed: {str(e)}")
+    finally:
+        if exchange:
+            try:
+                await exchange.close()
+            except:
+                pass
+@app.post("/trade/close")
+async def close_trade(user_id: str, data: dict):
+    """
+    Executes a market order with the opposite side on the master account
+    to effectively 'close' a position and mirrors it to investors.
+    """
+    position_id = data.get("position_id")
+    symbol = data.get("symbol")
+    side = data.get("side")
+    qty = data.get("quantity")
+    
+    if not position_id or not symbol or not side or qty is None:
+        raise HTTPException(status_code=400, detail="Missing position data (ID, symbol, side, qty)")
+    
+    opposite_side = 'sell' if side.lower() == 'buy' else 'buy'
+    
+    try:
+        # 1. Fetch Master Account
+        async with get_db() as conn:
+            async with conn.execute(
+                "SELECT * FROM accounts WHERE user_id = ? AND type = 'master' AND enabled = 1",
+                (user_id,)
+            ) as cursor:
+                master = await cursor.fetchone()
+                if not master:
+                    raise HTTPException(status_code=400, detail="No active master account found")
+                master = dict(master)
+        
+        # 2. Decrypt API credentials
+        api_key = decrypt_api_key(master.get('encrypted_key')).strip()
+        api_secret = decrypt_api_key(master.get('encrypted_secret')).strip()
+        passphrase = None
+        if master.get('encrypted_passphrase'):
+            passphrase = decrypt_api_key(master.get('encrypted_passphrase')).strip()
+            
+        # 3. Execute on Master
+        exchange_id = master.get('exchange', 'binance')
+        exchange_class = getattr(ccxt, exchange_id.lower())
+        exchange_options = {
+            'apiKey': api_key,
+            'secret': api_secret,
+            'password': passphrase,
+            'enableRateLimit': True,
+            'options': {'defaultType': master.get('trade_type', 'spot')}
+        }
+        
+        if exchange_id.lower() in ['binance', 'binanceus']:
+            exchange_options['adjustForTimeDifference'] = True
+            
+        exchange = exchange_class(exchange_options)
+        if bool(master.get('is_testnet', 0)):
+            exchange.set_sandbox_mode(True)
+            
+        trades_logger.info(f"CLOSING POSITION {position_id}: {symbol} {opposite_side} {qty}")
+        order = await exchange.create_market_order(symbol, opposite_side, qty)
+        
+        # 4. Fetch Investors
+        async with get_db() as conn:
+            async with conn.execute(
+                "SELECT * FROM accounts WHERE user_id = ? AND type = 'investor' AND enabled = 1",
+                (user_id,)
+            ) as cursor:
+                investors = [dict(r) for r in await cursor.fetchall()]
+        
+        # 5. Mirror the closing trade
+        if investors:
+            asyncio.create_task(engine.mirror_trade(
+                {"symbol": symbol, "side": opposite_side, "quantity": qty},
+                investors,
+                master_trade_id=order.get('id')
+            ))
+            
+        # 6. Broadcast 'closed' update for the original position UI
+        await broadcast_event("position_update", {
+            "position_id": position_id,
+            "symbol": symbol,
+            "master_status": "closed"
+        }, user_id=user_id)
+        
+        # 7. Refresh Balances
+        asyncio.create_task(engine.sync_user_balances(user_id))
+        
+        return {"status": "success", "order_id": order.get('id')}
+        
+    except Exception as e:
+        trades_logger.error(f"Position Close Failure: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        await exchange.close()
+        if 'exchange' in locals() and exchange:
+            await exchange.close()
+
+# --- Admin Endpoints ---
 
 @app.post("/admin/reset-trial/{user_id}")
 async def admin_reset_trial(user_id: str):
-    # Security: In production, check for admin token/role
     expiry = (datetime.now(timezone.utc) + timedelta(days=3)).timestamp()
     async with get_db() as conn:
         await conn.execute("UPDATE users SET plan_expiry = ? WHERE id = ?", (expiry, user_id))
         await conn.commit()
     return {"status": "success", "new_expiry": expiry}
 
+@app.post("/admin/update-plan/{user_id}")
+async def admin_update_plan(user_id: str, data: dict):
+    """Update user subscription plan."""
+    plan = data.get("plan")
+    if plan not in ["free", "basic", "pro"]:
+        raise HTTPException(status_code=400, detail="Invalid plan")
+    
+    days = data.get("days", 30)
+    expiry = (datetime.now(timezone.utc) + timedelta(days=days)).timestamp()
+    
+    async with get_db() as conn:
+        await conn.execute(
+            "UPDATE users SET plan = ?, plan_expiry = ? WHERE id = ?",
+            (plan, expiry, user_id)
+        )
+        await conn.commit()
+    
+    return {"status": "success", "plan": plan, "expiry": expiry}
+
+# --- Health Check ---
+
 @app.get("/health")
 async def health_check():
-    await broadcast_event("sync_status_update", {"status": "inactive", "message": "Engine Stopped"})
-    system_logger.info("Trade Engine stopped.")
+    return {
+        "status": "healthy",
+        "engine_running": engine.is_running,
+        "timestamp": datetime.now().isoformat()
+    }
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

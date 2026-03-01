@@ -21,6 +21,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _nameController = TextEditingController();
   final _apiKeyController = TextEditingController();
   final _apiSecretController = TextEditingController();
+  final _passphraseController = TextEditingController();
   final _lotSizeController = TextEditingController();
   final _riskPercentController = TextEditingController();
 
@@ -31,6 +32,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   bool _isEditing = false;
   bool _isActive = true;
   bool _obscureApiSecret = true;
+  bool _isTestnet = false;
   String _accountType = 'investor';
 
   // Field-level error messages
@@ -40,12 +42,17 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   String? _lotSizeError;
 
   static const _supportedExchanges = [
-    'Binance', 'Bybit', 'Bitget', 'OKX',
+    'Binance', 'Binance.US', 'Bybit', 'Bitget', 'OKX',
     'Gate.io', 'MEXC', 'Kraken', 'Phemex',
     'Deribit', 'BitMEX', 'Coinbase', 'KuCoin'
   ];
 
   bool get _isMaster => _accountType == 'master';
+  bool get _requiresPassphrase {
+    if (_selectedExchange == null) return false;
+    final ex = _selectedExchange!.toLowerCase();
+    return ex == 'bitget' || ex == 'okx' || ex == 'kucoin';
+  }
 
   @override
   void initState() {
@@ -78,7 +85,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       _selectedLotSizeMode = data['lot_size_mode'] == 'percentage' ? LotSizeMode.percentage : LotSizeMode.fixed;
       _selectedTradeTypeStr = data['trade_type'] ?? 'spot';
       _accountType = data['type'] ?? 'investor';
-      _isActive = data['enabled'] ?? true;
+      _isActive = data['enabled'] == 1 || data['enabled'] == true;
+      _isTestnet = data['is_testnet'] == 1 || data['is_testnet'] == true;
     }
   }
 
@@ -87,6 +95,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     _nameController.dispose();
     _apiKeyController.dispose();
     _apiSecretController.dispose();
+    _passphraseController.dispose();
     _lotSizeController.dispose();
     _riskPercentController.dispose();
     super.dispose();
@@ -258,6 +267,36 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 ),
               ),
 
+              const SizedBox(height: 16),
+
+              if (_requiresPassphrase) ...[
+                _fieldLabel('Passphrase / API Password'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _passphraseController,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    hintText: _isEditing
+                        ? 'Enter passphrase (leave blank to keep current)'
+                        : 'Enter passphrase',
+                    prefixIcon: const Icon(Icons.password_outlined),
+                  ),
+                ),
+                const SizedBox(height: 28),
+              ] else
+                const SizedBox(height: 28),
+
+              // ── Testnet / Sandbox Mode ────────────────────────
+              SwitchListTile(
+                title: const Text('Testnet / Sandbox Mode'),
+                subtitle: const Text('Enable for GitHub/Testnet API keys'),
+                value: _isTestnet,
+                onChanged: (v) => setState(() => _isTestnet = v),
+                secondary: const Icon(Icons.science_outlined),
+                activeColor: AppColors.primary,
+                contentPadding: EdgeInsets.zero,
+              ),
+
               const SizedBox(height: 28),
 
 
@@ -410,6 +449,10 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         lotSizeMode:
             _selectedLotSizeMode == LotSizeMode.percentage ? 'percentage' : 'fixed',
         tradeType: _selectedTradeTypeStr,
+        passphrase: _passphraseController.text.isNotEmpty
+            ? _passphraseController.text.trim()
+            : null,
+        isTestnet: _isTestnet,
       );
     } else {
       success = await syncProvider.addAccount(
@@ -421,6 +464,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         lotSizeMode:
             _selectedLotSizeMode == LotSizeMode.percentage ? 'percentage' : 'fixed',
         tradeType: _selectedTradeTypeStr,
+        passphrase: _passphraseController.text.trim(),
+        isTestnet: _isTestnet,
         type: _accountType,
       );
     }

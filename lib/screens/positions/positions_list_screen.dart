@@ -54,9 +54,9 @@ class PositionsListScreen extends StatelessWidget {
                 final pos = displayPositions[index];
                 
                 // Calculate investor status
-                final investors = pos['investors'] as Map<String, dynamic>? ?? {};
+                final investors = Map<String, dynamic>.from(pos['investors'] ?? {});
                 final syncedInvestors = investors.values.where((s) => s['status'] == 'filled').length;
-                final totalInvestors = investors.isEmpty ? (pos['totalInvestors'] ?? 0) : investors.length;
+                final totalInvestors = (pos['total_investors'] ?? pos['totalInvestors'] ?? (investors.isEmpty ? 0 : investors.length));
                 final failedInvestors = investors.values.where((s) => s['status'] == 'failed').length;
                 final isRetrying = investors.values.any((s) => s['status'] == 'retrying');
 

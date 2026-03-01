@@ -49,7 +49,8 @@ class LiveExecutionStatusScreen extends StatelessWidget {
   }
 
   bool _checkIfFinished(Map<String, dynamic> pos) {
-    final investors = pos['investors'] as Map<String, dynamic>? ?? {};
+    final investorsData = pos['investors'] ?? {};
+    final investors = Map<String, dynamic>.from(investorsData is Map ? investorsData : {});
     if (investors.isEmpty) return false;
     return investors.values.every((s) => s['status'] == 'filled' || s['status'] == 'failed');
   }
@@ -93,7 +94,8 @@ class LiveExecutionStatusScreen extends StatelessWidget {
       return const Center(child: Text('Initializing mirroring...'));
     }
 
-    final investors = position['investors'] as Map<String, dynamic>? ?? {};
+    final investorsData = position['investors'] ?? {};
+    final investors = Map<String, dynamic>.from(investorsData is Map ? investorsData : {});
     final investorIds = investors.keys.toList();
 
     if (investorIds.isEmpty) {

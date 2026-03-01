@@ -91,13 +91,62 @@ class PositionDetailScreen extends StatelessWidget {
               _buildStatItem(context, 'Sync Progress', '${_calculateSyncProgress(pos)}%'),
             ],
           ),
+          if (pos['master_status'] != 'closed') ...[
+            const SizedBox(height: 32),
+            GradientButton(
+              label: pos['master_status'] == 'closing' ? 'Closing...' : 'Close Position',
+              onPressed: pos['master_status'] == 'closing' ? null : () => _showCloseConfirmation(context, pos, syncProvider),
+              startColor: AppColors.danger,
+              endColor: AppColors.danger.withOpacity(0.8),
+              icon: pos['master_status'] == 'closing' ? null : Icons.close,
+            ),
+          ],
         ],
       ),
     ).animate().fadeIn().scale(begin: const Offset(0.95, 0.95));
   }
 
+  void _showCloseConfirmation(BuildContext context, Map<String, dynamic> pos, SyncProvider syncProvider) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: const Text('Close Position?'),
+        content: Text('This will execute a market ${pos['side'] == 'buy' ? 'sell' : 'buy'} order on your master account and mirror it to all active investors.\n\nAre you sure?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await syncProvider.closePosition(pos);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Close command sent to protocol')),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to close: $e'), backgroundColor: AppColors.danger),
+                  );
+                }
+              }
+            },
+            child: const Text('Execute Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   int _calculateSyncProgress(Map<String, dynamic> pos) {
-    final investors = pos['investors'] as Map<String, dynamic>? ?? {};
+    final investorsData = pos['investors'] ?? {};
+    final investors = Map<String, dynamic>.from(investorsData is Map ? investorsData : {});
     if (investors.isEmpty) return 0;
     final filled = investors.values.where((s) => s['status'] == 'filled').length;
     return (filled / investors.length * 100).toInt();

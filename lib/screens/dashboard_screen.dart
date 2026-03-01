@@ -482,12 +482,12 @@ class DashboardScreen extends StatelessWidget {
     return Column(
       children: [
         if (master != null) ...[
-          _buildAccountCard(context, master as Map<String, dynamic>, syncProvider, isMaster: true),
+          _buildAccountCard(context, Map<String, dynamic>.from(master as Map), syncProvider, isMaster: true),
           const SizedBox(height: 12),
         ],
         ...investors.map((s) => Padding(
           padding: const EdgeInsets.only(bottom: 12.0),
-          child: _buildAccountCard(context, s as Map<String, dynamic>, syncProvider),
+          child: _buildAccountCard(context, Map<String, dynamic>.from(s as Map), syncProvider),
         )),
       ],
     ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0, curve: Curves.easeOutCubic);
@@ -669,7 +669,7 @@ class DashboardScreen extends StatelessWidget {
 
     return Column(
       children: positions.where((p) => p is Map).map((pos) {
-        final investors = (pos as Map)['investors'] as Map<String, dynamic>? ?? {};
+        final investors = Map<String, dynamic>.from(pos['investors'] ?? {});
         final syncedCount = investors.values.where((s) => s['status'] == 'filled').length;
         final totalCount = investors.length;
 

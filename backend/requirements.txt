@@ -1,9 +1,29 @@
-fastapi
-uvicorn
-cryptography
-python-jose[cryptography]
-passlib[bcrypt]
-ccxt
-protobuf>=5.29.3
-pyotp
-qrcode[pil]
+# Crypto Sync Backend Requirements
+# Install with: pip install -r requirements.txt
+
+# Web Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+
+# Database
+aiosqlite==0.19.0
+
+# Crypto Exchange Integration
+ccxt==4.2.18
+
+# Security & Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+cryptography==42.0.0
+pyotp==2.9.0
+qrcode==7.4.2
+
+# CORS
+python-multipart==0.0.6
+
+# Utilities
+pillow==10.2.0
+python-dotenv==1.0.0
+
+# Production Server (optional - for deployment)
+gunicorn==21.2.0
